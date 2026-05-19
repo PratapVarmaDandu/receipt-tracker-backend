@@ -1,0 +1,45 @@
+{
+  "properties": [
+    {
+      "name": "encryption.secret",
+      "type": "java.lang.String",
+      "description": "Secret used to derive the AES-256-GCM key for encrypting stored AWS credentials. Set ENCRYPTION_SECRET env var in production.",
+      "defaultValue": "change-this-secret-before-going-to-production"
+    },
+    {
+      "name": "vision.ai.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable Claude Vision AI for receipt parsing. Requires vision.ai.api-key.",
+      "defaultValue": false
+    },
+    {
+      "name": "vision.ai.api-key",
+      "type": "java.lang.String",
+      "description": "Anthropic API key for Claude Vision AI (ANTHROPIC_API_KEY env var)."
+    },
+    {
+      "name": "vision.ai.model",
+      "type": "java.lang.String",
+      "description": "Claude model ID to use for Vision AI parsing.",
+      "defaultValue": "claude-sonnet-4-6"
+    },
+    {
+      "name": "vision.ai.max-pdf-pages",
+      "type": "java.lang.Integer",
+      "description": "Maximum number of PDF pages to process per upload.",
+      "defaultValue": 5
+    },
+    {
+      "name": "vision.ai.pdf-dpi",
+      "type": "java.lang.Integer",
+      "description": "DPI resolution for PDF-to-image conversion before Vision AI analysis.",
+      "defaultValue": 150
+    },
+    {
+      "name": "vision.ai.timeout-seconds",
+      "type": "java.lang.Integer",
+      "description": "HTTP timeout in seconds for calls to the Anthropic API.",
+      "defaultValue": 60
+    }
+  ]
+}

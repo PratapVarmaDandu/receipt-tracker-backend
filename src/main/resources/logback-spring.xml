@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+  <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+  <!-- Reads logging.level.com.receipttracker from application.properties.
+       Change it there (or set APP_LOG_LEVEL env var) to control verbosity:
+         INFO  — normal production use
+         DEBUG — detailed request/response tracing
+         TRACE — full SQL + parameter binding
+         OFF   — silence all app logs -->
+  <springProperty name="appLogLevel" source="logging.level.com.receipttracker" defaultValue="INFO"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+
+  <!-- Suppress noisy PDFBox font-scanner warnings (known PDFBox 3.x issue) -->
+  <logger name="org.apache.fontbox"            level="ERROR"/>
+  <logger name="org.apache.pdfbox.pdmodel.font" level="ERROR"/>
+
+  <logger name="com.receipttracker" level="${appLogLevel}"/>
+</configuration>
