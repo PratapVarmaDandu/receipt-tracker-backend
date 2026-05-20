@@ -21,6 +21,8 @@
         <!-- Override Spring Boot's Lombok 1.18.30 — required for Java 25 compatibility -->
         <lombok.version>1.18.46</lombok.version>
         <aws.sdk.version>2.26.0</aws.sdk.version>
+        <!-- mysql-connector-j 9.x required for MySQL 9.x compatibility -->
+        <mysql-connector-j.version>9.1.0</mysql-connector-j.version>
     </properties>
 
     <dependencyManagement>
