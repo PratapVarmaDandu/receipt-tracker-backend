@@ -11,11 +11,14 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Install Tesseract + English trained data
+# Install Tesseract + English trained data + HEIC/HEIF conversion tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tesseract-ocr \
-        tesseract-ocr-eng && \
+        tesseract-ocr-eng \
+        libheif-examples \
+        imagemagick \
+        libheif1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Set tessdata path (Debian/Ubuntu default)

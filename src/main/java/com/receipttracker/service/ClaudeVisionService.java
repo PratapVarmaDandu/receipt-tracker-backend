@@ -48,8 +48,9 @@ public class ClaudeVisionService {
     private static final String ANTHROPIC_VERSION = "2023-06-01";
 
     private static final String RECEIPT_PROMPT =
-            "You are a receipt data extraction engine. Output ONLY valid JSON, no explanation, no markdown.\n\n" +
-            "Extract all data from the provided receipt/invoice image(s) into this exact structure:\n" +
+            "You are a financial document data extraction engine. Output ONLY valid JSON, no explanation, no markdown.\n\n" +
+            "First determine if this document is a RECEIPT/INVOICE or a BANK_STATEMENT.\n\n" +
+            "For RECEIPTS and INVOICES use this exact structure:\n" +
             "{\n" +
             "  \"receiptType\": \"PURCHASE|RETURN|INVOICE\",\n" +
             "  \"storeName\": \"exact store name as printed\",\n" +
@@ -64,18 +65,39 @@ public class ClaudeVisionService {
             "  \"tip\": number_or_null,\n" +
             "  \"total\": number_or_null,\n" +
             "  \"items\": [\n" +
-            "    {\"name\": \"string\", \"quantity\": 1, \"unitPrice\": number_or_null, \"totalPrice\": number, " +
-            "\"category\": \"GROCERIES|ELECTRONICS|CLOTHING|HOUSEHOLD|AUTOMOTIVE|DINING|GAS|PHARMACY|OTHER or null\"}\n" +
+            "    {\"name\": \"string\", \"description\": null, \"quantity\": 1, \"unitPrice\": number_or_null,\n" +
+            "     \"totalPrice\": number, \"category\": \"GROCERIES|ELECTRONICS|CLOTHING|HOUSEHOLD|AUTOMOTIVE|DINING|GAS|PHARMACY|OTHER or null\"}\n" +
+            "  ]\n" +
+            "}\n\n" +
+            "For BANK STATEMENTS use this exact structure:\n" +
+            "{\n" +
+            "  \"receiptType\": \"BANK_STATEMENT\",\n" +
+            "  \"storeName\": \"bank institution name (e.g. Chase Bank, Bank of America)\",\n" +
+            "  \"storeType\": \"BANK\",\n" +
+            "  \"purchaseDate\": \"statement end date YYYY-MM-DD or null\",\n" +
+            "  \"purchaseTime\": null,\n" +
+            "  \"cardType\": null,\n" +
+            "  \"cardBank\": \"CHASE|DISCOVER|AMEX|CAPITAL_ONE|CITI|BANK_OF_AMERICA|WELLS_FARGO or null\",\n" +
+            "  \"lastFourDigits\": \"account last 4 digits or null\",\n" +
+            "  \"subtotal\": null,\n" +
+            "  \"tax\": null,\n" +
+            "  \"tip\": null,\n" +
+            "  \"total\": total_spending_as_positive_number_or_null,\n" +
+            "  \"items\": [\n" +
+            "    {\"name\": \"merchant or transaction description\", \"description\": \"YYYY-MM-DD transaction date\",\n" +
+            "     \"quantity\": 1, \"unitPrice\": amount_as_positive_number, \"totalPrice\": amount_as_positive_number,\n" +
+            "     \"category\": \"GROCERIES|DINING|GAS|TRAVEL|UTILITIES|HEALTHCARE|SHOPPING|ENTERTAINMENT|OTHER\"}\n" +
             "  ]\n" +
             "}\n\n" +
             "Rules:\n" +
             "1. PURCHASE=normal sale, RETURN=refund/return receipt, INVOICE=digital invoice (Amazon, Wayfair, etc.)\n" +
             "2. Use ONLINE for any e-commerce site. COSTCO only for Costco. GAS_STATION for fuel.\n" +
             "3. Monetary values are plain numbers without $ symbol (e.g. 12.99 not $12.99).\n" +
-            "4. Multiple pages = one receipt — do not duplicate items across pages.\n" +
-            "5. Costco: exclude item codes (5-8 digit numbers) from item names. Include instant savings as items with negative totalPrice.\n" +
-            "6. Use null for any field not visible in the image. Never guess or infer values.\n" +
-            "7. Output ONLY the JSON object. Nothing before or after it.";
+            "4. For bank statements: include debit/spending transactions only. Use positive amounts. Skip credits and deposits.\n" +
+            "5. Multiple pages = one document — do not duplicate items across pages.\n" +
+            "6. Costco: exclude item codes (5-8 digit numbers) from item names. Include instant savings as items with negative totalPrice.\n" +
+            "7. Use null for any field not visible in the image. Never guess or infer values.\n" +
+            "8. Output ONLY the JSON object. Nothing before or after it.";
 
     @Value("${vision.ai.enabled:false}")
     private boolean enabled;
@@ -263,6 +285,10 @@ public class ClaudeVisionService {
             for (ClaudeItemJson item : json.items) {
                 ParsedReceiptItem pi = new ParsedReceiptItem();
                 pi.setName(item.name);
+                // For bank statements, prefer the explicit description field; fall back to transactionDate
+                String desc = item.description != null ? item.description
+                            : item.transactionDate;
+                pi.setDescription(desc);
                 pi.setQuantity(item.quantity != null ? item.quantity : 1);
                 pi.setUnitPrice(item.unitPrice);
                 pi.setTotalPrice(item.totalPrice);
@@ -332,9 +358,11 @@ public class ClaudeVisionService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class ClaudeItemJson {
         public String name;
+        public String description;
         public Integer quantity;
         public BigDecimal unitPrice;
         public BigDecimal totalPrice;
         public String category;
+        public String transactionDate;
     }
 }

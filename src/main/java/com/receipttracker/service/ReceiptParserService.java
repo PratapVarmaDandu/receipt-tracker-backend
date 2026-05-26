@@ -2,6 +2,7 @@ package com.receipttracker.service;
 
 import com.receipttracker.dto.ParsedReceiptData;
 import com.receipttracker.dto.ParsedReceiptItem;
+import com.receipttracker.model.ReceiptType;
 import com.receipttracker.model.StoreType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,6 +80,18 @@ public class ReceiptParserService {
     private static final Pattern QTY_ITEM_PATTERN = Pattern.compile(
             "^(\\d{1,3})\\s+(.+?)\\s{2,}(\\d{1,4}\\.\\d{2})$");
 
+    // Bank statement transaction line: "01/15 AMAZON.COM          -45.99"
+    private static final Pattern BANK_TRANSACTION_PATTERN = Pattern.compile(
+            "^(\\d{1,2}[/\\-]\\d{1,2}(?:[/\\-]\\d{2,4})?)\\s+(.{4,50}?)\\s{2,}([\\-]?\\d{1,6}\\.\\d{2})$");
+
+    // Bank statement keywords for detection
+    private static final Set<String> BANK_KEYWORDS = new HashSet<>(Arrays.asList(
+            "STATEMENT", "ACCOUNT SUMMARY", "BEGINNING BALANCE", "ENDING BALANCE",
+            "ACCOUNT NUMBER", "STATEMENT PERIOD", "DEPOSITS", "WITHDRAWALS",
+            "TRANSACTION DATE", "POSTING DATE", "AVAILABLE BALANCE", "BANK OF AMERICA",
+            "CHASE BANK", "WELLS FARGO", "CITIBANK", "CAPITAL ONE", "DISCOVER BANK"
+    ));
+
     // Lines to always skip in item parsing
     private static final Set<String> SKIP_PREFIXES = new HashSet<>(Arrays.asList(
             "SUBTOTAL", "SUB-TOTAL", "SUB TOTAL", "TAX", "TOTAL", "THANK",
@@ -100,6 +113,10 @@ public class ReceiptParserService {
 
         String[] lines = ocrText.split("\n");
 
+        if (isBankStatement(ocrText)) {
+            return parseBankStatement(lines, ocrText);
+        }
+
         data.setStoreType(detectStoreType(ocrText));
         data.setStoreName(detectStoreName(lines, ocrText, data.getStoreType()));
         data.setPurchaseDateTime(extractDateTime(ocrText));
@@ -115,6 +132,79 @@ public class ReceiptParserService {
         log.info("Parsed: store={} type={} total={} items={}",
                 data.getStoreName(), data.getStoreType(), data.getTotal(), data.getItems().size());
         return data;
+    }
+
+    // ── Bank statement detection & parsing ───────────────────────────────────
+
+    private boolean isBankStatement(String text) {
+        String u = text.toUpperCase();
+        int matches = 0;
+        for (String kw : BANK_KEYWORDS) {
+            if (u.contains(kw)) matches++;
+        }
+        return matches >= 2;
+    }
+
+    private ParsedReceiptData parseBankStatement(String[] lines, String fullText) {
+        ParsedReceiptData data = new ParsedReceiptData();
+        data.setReceiptType(ReceiptType.BANK_STATEMENT);
+        data.setStoreType(StoreType.BANK);
+        data.setStoreName(detectBankName(fullText));
+        data.setPurchaseDateTime(extractDateTime(fullText));
+        extractCardInfo(fullText, data);
+
+        List<ParsedReceiptItem> transactions = new ArrayList<>();
+        BigDecimal totalSpending = BigDecimal.ZERO;
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+
+            Matcher m = BANK_TRANSACTION_PATTERN.matcher(trimmed);
+            if (m.find()) {
+                String txDate = m.group(1);
+                String description = m.group(2).trim();
+                String amountStr = m.group(3).replace(",", "");
+
+                BigDecimal amount;
+                try { amount = new BigDecimal(amountStr); } catch (NumberFormatException e) { continue; }
+
+                // Skip credits (negative amounts = money coming in on bank statements)
+                if (amount.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                ParsedReceiptItem item = new ParsedReceiptItem();
+                item.setName(description);
+                item.setDescription(txDate);
+                item.setQuantity(1);
+                item.setUnitPrice(amount);
+                item.setTotalPrice(amount);
+                transactions.add(item);
+                totalSpending = totalSpending.add(amount);
+            }
+        }
+
+        data.setItems(transactions);
+        if (totalSpending.compareTo(BigDecimal.ZERO) > 0) {
+            data.setTotal(totalSpending);
+        }
+
+        log.info("Parsed bank statement: bank={} transactions={} total={}",
+                data.getStoreName(), transactions.size(), data.getTotal());
+        return data;
+    }
+
+    private String detectBankName(String text) {
+        String u = text.toUpperCase();
+        if (u.contains("BANK OF AMERICA") || u.contains("BOFA")) return "Bank of America";
+        if (u.contains("CHASE"))          return "Chase Bank";
+        if (u.contains("WELLS FARGO"))    return "Wells Fargo";
+        if (u.contains("CITIBANK") || u.contains("CITI BANK")) return "Citibank";
+        if (u.contains("CAPITAL ONE"))    return "Capital One";
+        if (u.contains("DISCOVER"))       return "Discover Bank";
+        if (u.contains("AMEX") || u.contains("AMERICAN EXPRESS")) return "American Express";
+        if (u.contains("US BANK"))        return "U.S. Bank";
+        if (u.contains("TD BANK"))        return "TD Bank";
+        return "Bank";
     }
 
     // ── Store type ────────────────────────────────────────────────────────────

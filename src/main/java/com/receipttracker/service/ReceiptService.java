@@ -108,9 +108,11 @@ public class ReceiptService {
             for (ParsedReceiptItem pi : parsed.getItems()) {
                 ReceiptItem item = new ReceiptItem();
                 item.setName(pi.getName());
+                item.setDescription(pi.getDescription());
                 item.setQuantity(pi.getQuantity());
                 item.setUnitPrice(pi.getUnitPrice());
                 item.setTotalPrice(pi.getTotalPrice());
+                item.setCategory(pi.getCategory());
                 item.setReceipt(receipt);
                 receipt.getItems().add(item);
             }

@@ -7,5 +7,6 @@ public enum StoreType {
     RESTAURANT,
     PHARMACY,
     ONLINE,
+    BANK,
     OTHER
 }

@@ -15,11 +15,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class OcrService {
@@ -57,18 +59,32 @@ public class OcrService {
 
         log.info("Saved upload to {}", savedPath);
 
+        // Convert HEIC/HEIF to JPEG before OCR — Tesseract and Claude cannot read HEIC natively
+        File fileForProcessing = savedPath.toFile();
+        String processedName = savedName;
+        if (isHeic(originalName)) {
+            try {
+                File converted = convertHeicToJpeg(savedPath.toFile());
+                fileForProcessing = converted;
+                processedName = converted.getName();
+                log.info("HEIC converted to JPEG: {}", processedName);
+            } catch (IOException e) {
+                log.warn("HEIC conversion failed — OCR/Vision AI will likely fail: {}", e.getMessage());
+            }
+        }
+
         String text;
         try {
             text = originalName.toLowerCase().endsWith(".pdf")
                     ? extractFromPdf(savedPath.toFile())
-                    : extractFromImage(savedPath.toFile());
+                    : extractFromImage(fileForProcessing);
         } catch (Exception e) {
-            log.warn("Text extraction failed for {}: {} — proceeding with empty text", savedName, e.getMessage());
+            log.warn("Text extraction failed for {}: {} — proceeding with empty text", processedName, e.getMessage());
             text = "";
         }
 
-        log.info("OCR extracted {} chars from {}", text.length(), savedName);
-        return new OcrResult(savedName, text);
+        log.info("OCR extracted {} chars from {}", text.length(), processedName);
+        return new OcrResult(processedName, text);
     }
 
     private String extractFromPdf(File file) throws IOException {
@@ -91,5 +107,54 @@ public class OcrService {
             log.warn("Tesseract unavailable: {}. Install: brew install tesseract", e.getMessage());
             return "";
         }
+    }
+
+    // ── HEIC conversion ───────────────────────────────────────────────────────
+
+    private static boolean isHeic(String filename) {
+        String lower = filename.toLowerCase();
+        return lower.endsWith(".heic") || lower.endsWith(".heif");
+    }
+
+    /**
+     * Converts a HEIC/HEIF file to JPEG by trying available system converters in order:
+     * 1. sips        — built-in on macOS
+     * 2. heif-convert — provided by libheif-tools/libheif-examples on Linux
+     * 3. convert     — ImageMagick (any platform)
+     */
+    private File convertHeicToJpeg(File heicFile) throws IOException {
+        String heicPath = heicFile.getAbsolutePath();
+        String jpegPath = heicPath.replaceAll("(?i)\\.(heic|heif)$", ".jpg");
+        File jpegFile = new File(jpegPath);
+
+        if (runConverter(List.of("sips", "-s", "format", "jpeg", heicPath, "--out", jpegPath), jpegFile)) {
+            return jpegFile;
+        }
+        if (runConverter(List.of("heif-convert", heicPath, jpegPath), jpegFile)) {
+            return jpegFile;
+        }
+        if (runConverter(List.of("convert", heicPath, jpegPath), jpegFile)) {
+            return jpegFile;
+        }
+        throw new IOException(
+            "No HEIC converter found. Install one of: sips (macOS), libheif-tools (Linux), or imagemagick");
+    }
+
+    private boolean runConverter(List<String> cmd, File expectedOutput) {
+        try {
+            Process p = new ProcessBuilder(cmd)
+                    .redirectErrorStream(true)
+                    .start();
+            // Drain stdout/stderr so the process doesn't block on a full buffer
+            p.getInputStream().transferTo(OutputStream.nullOutputStream());
+            int exit = p.waitFor();
+            if (exit == 0 && expectedOutput.exists() && expectedOutput.length() > 0) {
+                log.debug("HEIC converter '{}' succeeded", cmd.get(0));
+                return true;
+            }
+        } catch (Exception e) {
+            log.debug("HEIC converter '{}' unavailable: {}", cmd.get(0), e.getMessage());
+        }
+        return false;
     }
 }
