@@ -37,13 +37,28 @@ com.receipttracker
 ## Receipt upload pipeline
 ```
 POST /api/receipts/upload
-  → OcrService.processUpload()           saves file, runs Tesseract
+  → OcrService.processUpload()           saves file, converts HEIC→JPEG, runs Tesseract
   → ClaudeVisionService.analyze()        primary parser (optional)
   → ReceiptParserService.parse()         regex fallback
   → Receipt + ReceiptItem persist
   → userStorageService.finalizeStorage() move file to S3/custom path (non-fatal)
 ```
 Vision AI failures are always non-fatal — always fall back to regex parser silently.
+
+HEIC/HEIF conversion (iPhone camera photos): tries `sips` (macOS), then `heif-convert`
+(Linux/Docker), then `convert` (ImageMagick). Each converter is given a 60 s timeout
+with `p.waitFor(60, TimeUnit.SECONDS)` — the process is force-killed on timeout.
+Spring and nginx both accept up to 25 MB uploads; nginx upload location has 300 s timeouts.
+
+## Expense sharing
+- Entity: `ExpenseShare` → table `expense_shares`; status enum: `ShareStatus`
+  (`PENDING`, `ACCEPTED`, `DENIED`, `CHANGE_REQUESTED`, `CHANGE_APPROVED`, `CHANGE_REJECTED`)
+- `inviteToken` is a UUID generated in `@PrePersist`; never logged verbatim
+- Public endpoint `GET /api/shares/token/**` is `permitAll()` for GET only — POST requires auth
+  (enforced with `requestMatchers(HttpMethod.GET, "/api/shares/token/**")` in SecurityConfig)
+- Email: `EmailService` uses `@Autowired(required=false) JavaMailSender` — if no SMTP config,
+  falls back to `log.warn`; email failures are never propagated (non-fatal)
+- Requires `GMAIL_USERNAME` + `GMAIL_APP_PASSWORD` env vars for real email delivery
 
 ## Vision AI config
 - Feature-flagged: `vision.ai.enabled=${VISION_AI_ENABLED:false}`
@@ -76,6 +91,8 @@ Vision AI failures are always non-fatal — always fall back to regex parser sil
 | `APP_LOG_LEVEL` | `INFO` | set `DEBUG` to trace SQL + security |
 | `FRONTEND_URL` | `http://localhost:4200` | CORS + OAuth redirect |
 | `DB_URL/DB_USER/DB_PASS` | MySQL on localhost | overridden by profile |
+| `GMAIL_USERNAME` | `""` | Gmail address for expense-share emails |
+| `GMAIL_APP_PASSWORD` | `""` | Gmail App Password (not account password) |
 
 ## Commands
 ```
@@ -93,3 +110,5 @@ mvn test                                              # run tests
 - Don't hardcode cashback rates outside `CashbackService.CARD_RATES`
 - Don't run as profile `local` in prod — it disables all auth
 - Don't use `float`/`double` for money — use `BigDecimal`
+- Don't use `requestMatchers("/api/shares/token/**").permitAll()` — must scope to GET only to keep POST action endpoint auth-protected
+- Don't let `p.waitFor()` block indefinitely — always use `p.waitFor(N, TimeUnit.SECONDS)` with `p.destroyForcibly()` on timeout

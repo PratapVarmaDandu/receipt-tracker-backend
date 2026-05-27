@@ -13,6 +13,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import org.springframework.http.HttpMethod;
+
 import java.util.List;
 import java.util.Arrays;
 
@@ -54,6 +56,7 @@ public class SecurityConfig {
             // PRODUCTION/TEST: Require authentication for API endpoints
             http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/error").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/shares/token/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             );

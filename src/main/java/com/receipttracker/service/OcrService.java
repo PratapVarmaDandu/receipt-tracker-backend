@@ -24,6 +24,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class OcrService {
@@ -147,8 +148,13 @@ public class OcrService {
                     .start();
             // Drain stdout/stderr so the process doesn't block on a full buffer
             p.getInputStream().transferTo(OutputStream.nullOutputStream());
-            int exit = p.waitFor();
-            if (exit == 0 && expectedOutput.exists() && expectedOutput.length() > 0) {
+            boolean finished = p.waitFor(60, TimeUnit.SECONDS);
+            if (!finished) {
+                p.destroyForcibly();
+                log.warn("HEIC converter '{}' timed out after 60s — killed", cmd.get(0));
+                return false;
+            }
+            if (p.exitValue() == 0 && expectedOutput.exists() && expectedOutput.length() > 0) {
                 log.debug("HEIC converter '{}' succeeded", cmd.get(0));
                 return true;
             }
