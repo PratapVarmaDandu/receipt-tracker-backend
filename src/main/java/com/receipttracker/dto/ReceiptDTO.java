@@ -25,6 +25,8 @@ public class ReceiptDTO {
     private BigDecimal total;
     private String imageFileName;
     private LocalDateTime uploadedAt;
+    private String fileSaveStatus;
+    private String fileSavedTo;
     private List<ReceiptItemDTO> items;
     private BigDecimal cashbackEarned;
     private BigDecimal potentialCashback;

@@ -1,5 +1,6 @@
 package com.receipttracker.controller;
 
+import com.receipttracker.config.StoragePathResolver;
 import com.receipttracker.dto.StorageConfigDTO;
 import com.receipttracker.dto.StorageUsageDTO;
 import com.receipttracker.model.StorageType;
@@ -12,7 +13,6 @@ import com.receipttracker.service.UserStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -30,9 +30,7 @@ public class StorageController {
 
     private static final Logger log = LoggerFactory.getLogger(StorageController.class);
 
-    @Value("${upload.dir:uploads}")
-    private String uploadDir;
-
+    @Autowired private StoragePathResolver storagePathResolver;
     @Autowired private UserRepository userRepository;
     @Autowired private ReceiptRepository receiptRepository;
     @Autowired private EncryptionService encryptionService;
@@ -142,7 +140,7 @@ public class StorageController {
         StorageConfigDTO dto = new StorageConfigDTO();
         dto.setStorageType(user.getStorageType() != null ? user.getStorageType() : StorageType.LOCAL);
         dto.setLocalStoragePath(user.getLocalStoragePath());
-        dto.setDefaultStoragePath(Paths.get(uploadDir).toAbsolutePath().toString());
+        dto.setDefaultStoragePath(storagePathResolver.getPath());
         dto.setS3BucketName(user.getS3BucketName());
         dto.setS3Region(user.getS3Region());
         // Decrypt the access key ID (not highly sensitive) for display

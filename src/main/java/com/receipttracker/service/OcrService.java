@@ -1,5 +1,6 @@
 package com.receipttracker.service;
 
+import com.receipttracker.config.StoragePathResolver;
 import com.receipttracker.dto.ParsedReceiptData;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
@@ -8,6 +9,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,8 +33,8 @@ public class OcrService {
     @Value("${tesseract.data.path:/opt/homebrew/share/tessdata}")
     private String tessDataPath;
 
-    @Value("${upload.dir:uploads}")
-    private String uploadDir;
+    @Autowired
+    private StoragePathResolver storagePathResolver;
 
     public record OcrResult(String savedFilename, String extractedText, ParsedReceiptData parsedData) {
         public OcrResult(String savedFilename, String extractedText) {
@@ -41,9 +43,7 @@ public class OcrService {
     }
 
     public OcrResult processUpload(MultipartFile file) throws IOException {
-        // Always use absolute path — Spring 6 / Tomcat requires it for transferTo()
-        Path dir = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Files.createDirectories(dir);
+        Path dir = storagePathResolver.asPath();
 
         String originalName = file.getOriginalFilename() != null
                 ? file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_")

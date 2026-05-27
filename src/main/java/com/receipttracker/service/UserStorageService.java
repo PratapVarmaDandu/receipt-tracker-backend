@@ -1,12 +1,12 @@
 package com.receipttracker.service;
 
+import com.receipttracker.config.StoragePathResolver;
 import com.receipttracker.dto.StorageUsageDTO;
 import com.receipttracker.model.StorageType;
 import com.receipttracker.model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -22,11 +22,14 @@ public class UserStorageService {
 
     private static final Logger log = LoggerFactory.getLogger(UserStorageService.class);
 
-    @Value("${upload.dir:uploads}")
-    private String defaultUploadDir;
+    @Autowired
+    private StoragePathResolver storagePathResolver;
 
     @Autowired
     private EncryptionService encryptionService;
+
+    /** Result of a file finalization attempt. */
+    public record StorageResult(String status, String savedPath) {}
 
     /**
      * After OCR + Vision processing, moves/uploads the temp file to the user's configured storage:
@@ -38,26 +41,36 @@ public class UserStorageService {
      * Errors are logged but do NOT propagate — the receipt DB record is still valid even
      * if the file finalization fails (file stays in the default upload dir as a fallback).
      */
-    public void finalizeStorage(User user, String filename) {
+    public StorageResult finalizeStorage(User user, String filename) {
         StorageType type = user.getStorageType() != null ? user.getStorageType() : StorageType.LOCAL;
         try {
             if (type == StorageType.S3 && user.isStorageConfigured()) {
                 uploadToS3(user, filename);
-            } else if (type == StorageType.LOCAL
+                return new StorageResult("SAVED", "s3://" + user.getS3BucketName() + "/" + filename);
+            }
+            if (type == StorageType.LOCAL
                     && user.getLocalStoragePath() != null
                     && !user.getLocalStoragePath().isBlank()) {
+                Path destDir = Paths.get(user.getLocalStoragePath()).toAbsolutePath();
                 moveToCustomLocalPath(user.getLocalStoragePath(), filename);
+                return new StorageResult("SAVED", destDir.resolve(filename).toString());
             }
-            // else: file stays in default uploadDir — no action needed
+            // File stays in the OS-resolved default upload dir
+            return new StorageResult("DEFAULT", defaultDir().resolve(filename).toString());
         } catch (Exception e) {
             log.warn("Failed to finalize storage for file={}: {} — file remains in default upload dir",
                     filename, e.getMessage());
+            return new StorageResult("FAILED", defaultDir().resolve(filename).toString());
         }
+    }
+
+    private Path defaultDir() {
+        return storagePathResolver.asPath();
     }
 
     /** Returns the temp file written by OcrService (always in the default upload dir). */
     public File getTempFile(String filename) {
-        return Paths.get(defaultUploadDir).toAbsolutePath().resolve(filename).toFile();
+        return defaultDir().resolve(filename).toFile();
     }
 
     private void uploadToS3(User user, String filename) throws IOException {
@@ -110,7 +123,7 @@ public class UserStorageService {
                 return;
             }
         }
-        Path fallback = Paths.get(defaultUploadDir).toAbsolutePath().resolve(filename);
+        Path fallback = defaultDir().resolve(filename);
         if (Files.deleteIfExists(fallback)) {
             log.info("Deleted local file {}", fallback);
         }
@@ -151,16 +164,15 @@ public class UserStorageService {
                 log.warn("Failed to connect to S3 for usage calculation: {}", e.getMessage());
             }
         } else {
-            String basePath = (type == StorageType.LOCAL && user.getLocalStoragePath() != null
+            Path baseDir = (type == StorageType.LOCAL && user.getLocalStoragePath() != null
                     && !user.getLocalStoragePath().isBlank())
-                    ? user.getLocalStoragePath()
-                    : defaultUploadDir;
-            location = Paths.get(basePath).toAbsolutePath().toString();
+                    ? Paths.get(user.getLocalStoragePath()).toAbsolutePath()
+                    : defaultDir();
+            location = baseDir.toString();
 
             for (String filename : valid) {
-                // Check configured path first, fall back to default uploadDir
-                Path primary  = Paths.get(basePath).toAbsolutePath().resolve(filename);
-                Path fallback = Paths.get(defaultUploadDir).toAbsolutePath().resolve(filename);
+                Path primary  = baseDir.resolve(filename);
+                Path fallback = defaultDir().resolve(filename);
                 try {
                     if (Files.exists(primary)) {
                         totalBytes += Files.size(primary);
@@ -196,7 +208,7 @@ public class UserStorageService {
     }
 
     private void moveToCustomLocalPath(String destPath, String filename) throws IOException {
-        Path src = Paths.get(defaultUploadDir).toAbsolutePath().resolve(filename);
+        Path src = defaultDir().resolve(filename);
         Path destDir = Paths.get(destPath).toAbsolutePath();
         Files.createDirectories(destDir);
         Files.move(src, destDir.resolve(filename), StandardCopyOption.REPLACE_EXISTING);

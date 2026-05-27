@@ -1,5 +1,6 @@
 package com.receipttracker.service;
 
+import com.receipttracker.config.StoragePathResolver;
 import com.receipttracker.dto.*;
 import com.receipttracker.model.Receipt;
 import com.receipttracker.model.ReceiptItem;
@@ -9,7 +10,6 @@ import com.receipttracker.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,7 +20,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -38,9 +37,7 @@ public class ReceiptService {
     @Autowired private CashbackService cashbackService;
     @Autowired private ClaudeVisionService claudeVisionService;
     @Autowired private UserStorageService userStorageService;
-
-    @Value("${upload.dir:uploads}")
-    private String uploadDir;
+    @Autowired private StoragePathResolver storagePathResolver;
 
     // ── User resolution ───────────────────────────────────────────────────────
 
@@ -73,7 +70,7 @@ public class ReceiptService {
                     System.currentTimeMillis() - ocrStart, ocr.extractedText().length());
 
             long parseStart = System.currentTimeMillis();
-            File savedFile = Paths.get(uploadDir).toAbsolutePath().resolve(ocr.savedFilename()).toFile();
+            File savedFile = storagePathResolver.asPath().resolve(ocr.savedFilename()).toFile();
             Optional<ParsedReceiptData> visionResult = claudeVisionService.analyze(savedFile);
             ParsedReceiptData parsed;
             if (visionResult.isPresent()) {
@@ -122,11 +119,14 @@ public class ReceiptService {
             log.debug("  [5/5] Database save completed in {}ms - receiptId={}",
                     System.currentTimeMillis() - saveStart, saved.getId());
 
-            // Move/upload the file to the user's configured storage (S3 or custom local path).
-            // Errors here are non-fatal — receipt is already saved and file stays in default uploadDir.
-            userStorageService.finalizeStorage(user, ocr.savedFilename());
+            // Move/upload file to configured storage. Non-fatal — receipt is already saved.
+            UserStorageService.StorageResult storageResult =
+                    userStorageService.finalizeStorage(user, ocr.savedFilename());
+            log.info("  Storage finalized: status={}, path={}", storageResult.status(), storageResult.savedPath());
 
             ReceiptDTO result = toDTO(saved);
+            result.setFileSaveStatus(storageResult.status());
+            result.setFileSavedTo(storageResult.savedPath());
             long totalDuration = System.currentTimeMillis() - startTime;
             log.info("TRANSACTION: uploadAndProcess COMMITTED - receiptId={}, duration={}ms, " +
                     "store={}, total={}, items={}", 
