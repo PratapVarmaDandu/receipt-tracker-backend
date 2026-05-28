@@ -85,8 +85,9 @@ public class ExpenseShareService {
         }
 
         boolean isEqual = "EQUAL".equalsIgnoreCase(req.getSplitType());
+        // Divide by (invitees + 1) so the owner's share is also accounted for
         BigDecimal equalAmount = isEqual
-                ? receipt.getTotal().divide(BigDecimal.valueOf(invitees.size()), 2, RoundingMode.HALF_UP)
+                ? receipt.getTotal().divide(BigDecimal.valueOf(invitees.size() + 1), 2, RoundingMode.HALF_UP)
                 : null;
 
         // Collect existing invitee emails for this receipt to prevent duplicates
