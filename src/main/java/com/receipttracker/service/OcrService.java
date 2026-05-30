@@ -97,6 +97,12 @@ public class OcrService {
     }
 
     private String extractFromImage(File file) {
+        // Guard: if eng.traineddata is missing Tesseract's native code will SIGSEGV and kill the JVM
+        File engData = new File(tessDataPath, "eng.traineddata");
+        if (!engData.exists()) {
+            log.warn("Tesseract eng.traineddata not found at {} — skipping OCR (tessdata not installed)", tessDataPath);
+            return "";
+        }
         try {
             Tesseract tess = new Tesseract();
             tess.setDatapath(tessDataPath);
@@ -105,7 +111,7 @@ public class OcrService {
             tess.setOcrEngineMode(1);
             return tess.doOCR(file);
         } catch (TesseractException | UnsatisfiedLinkError e) {
-            log.warn("Tesseract unavailable: {}. Install: brew install tesseract", e.getMessage());
+            log.warn("Tesseract failed: {}. Install: brew install tesseract", e.getMessage());
             return "";
         }
     }

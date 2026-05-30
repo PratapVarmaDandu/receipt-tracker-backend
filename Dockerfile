@@ -21,6 +21,10 @@ RUN apt-get update && \
         libheif1 && \
     rm -rf /var/lib/apt/lists/*
 
+# Ubuntu installs tessdata to /usr/share/tesseract-ocr/4.00/tessdata/
+# Symlink to the path our app expects so Tesseract can find eng.traineddata
+RUN ln -s /usr/share/tesseract-ocr/4.00/tessdata /usr/share/tessdata
+
 # Set tessdata path (Debian/Ubuntu default)
 ENV TESSDATA_PATH=/usr/share/tessdata
 
