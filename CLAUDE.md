@@ -50,6 +50,23 @@ HEIC/HEIF conversion (iPhone camera photos): tries `sips` (macOS), then `heif-co
 with `p.waitFor(60, TimeUnit.SECONDS)` — the process is force-killed on timeout.
 Spring and nginx both accept up to 25 MB uploads; nginx upload location has 300 s timeouts.
 
+Tessdata path fix: Ubuntu installs trained data to `/usr/share/tesseract-ocr/4.00/tessdata/`.
+The Dockerfile creates a symlink `/usr/share/tessdata → /usr/share/tesseract-ocr/4.00/tessdata/`
+so the app's configured `TESSDATA_PATH=/usr/share/tessdata` resolves correctly.
+`OcrService.extractFromImage()` guards with `new File(tessDataPath, "eng.traineddata").exists()`
+before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that kills the JVM.
+
+## Receipt parsing (ReceiptParserService)
+- ALDI receipts: item lines start with a 6-digit code (`356567 Organic Red Grapes  4.99 FA`);
+  matched by `ALDI_ITEM_PATTERN`. Trailing `FA`/`FB` tax flags are ignored.
+- ALDI qty breakdown lines (`3 x  0.55`) are parsed separately to back-fill the previous
+  item's `quantity` and `unitPrice`; the total price is already on the item line.
+- "T O T A L" (letters spaced out) — ALDI prints the total word this way. Handled by
+  compacting whitespace (`u.replaceAll("\\s+","")`) before the `startsWith("TOTAL")` check.
+- Generic item pattern requires 2+ spaces before the price to avoid false positives.
+- Vision AI (`ClaudeVisionService`) is the primary parser when `VISION_AI_ENABLED=true`;
+  far more accurate than regex for unusual layouts — enable with `ANTHROPIC_API_KEY` in env.
+
 ## Expense sharing
 - Entity: `ExpenseShare` → table `expense_shares`; status enum: `ShareStatus`
   (`PENDING`, `ACCEPTED`, `DENIED`, `CHANGE_REQUESTED`, `CHANGE_APPROVED`, `CHANGE_REJECTED`)
@@ -86,7 +103,11 @@ Spring and nginx both accept up to 25 MB uploads; nginx upload location has 300 
 ## Security / auth
 - Google OAuth2 → Spring Security session (JSESSIONID), not JWT
 - Profile `local`: all `/api/**` endpoints open (no auth gate) — safe for H2 dev
+- Profile `local-mysql`: same auth bypass as `local` via `LocalDevSecurityFilter`; uses MySQL
 - Profile `prod`/`test`: all `/api/**` requires authenticated session
+- `LocalDevSecurityFilter` (`@Profile({"local","local-mysql"})`, `@Order(HIGHEST_PRECEDENCE)`):
+  auto-injects mock OAuth2 principal (googleId=`local-dev-user`, email=`dev@localhost.local`)
+  so the frontend never shows the login page during local dev
 - CORS: allows `http://localhost:4200` and `${FRONTEND_URL}` with `allowCredentials=true`
 - Cookie: `SameSite=None; Secure` in prod; `SameSite=Lax` locally
 

@@ -33,7 +33,7 @@ import java.util.Map;
  * The dev user (googleId=local-dev-user) is created in the DB on first use.
  */
 @Component
-@Profile("local")
+@Profile({"local", "local-mysql"})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class LocalDevSecurityFilter extends OncePerRequestFilter {
 

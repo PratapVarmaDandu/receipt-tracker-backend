@@ -60,6 +60,14 @@ public class ReceiptParserService {
             "\\b(VISA|MASTERCARD|MASTER CARD|AMEX|AMERICAN EXPRESS|DISCOVER|DEBIT)\\b",
             Pattern.CASE_INSENSITIVE);
 
+    // ALDI format: "356567 Organic Red Grapes  4.99 FA" (6-digit code, optional 1-2 char tax flag)
+    private static final Pattern ALDI_ITEM_PATTERN = Pattern.compile(
+            "^\\d{6}\\s+(.+?)\\s+(\\d{1,4}\\.\\d{2})\\s*(?:[A-Z]{1,2})?$");
+
+    // ALDI qty breakdown: "3 x  0.55" — groups: 1=qty, 2=unit price
+    private static final Pattern ALDI_QTY_LINE = Pattern.compile(
+            "^(\\d+)\\s+[xX]\\s+(\\d+\\.\\d{2})$");
+
     // Costco item — price on SAME line: "E 222490 KS XL PEANUT 15.38 N"
     private static final Pattern COSTCO_ITEM_PATTERN = Pattern.compile(
             "^[E*]?\\s+(\\d{5,8})\\s+(.+?)\\s+(\\d{1,4}\\.\\d{2})\\s*[NAEFJT]?$");
@@ -265,6 +273,7 @@ public class ReceiptParserService {
         if (u.contains("CHIPOTLE"))          return "Chipotle";
         if (u.contains("STARBUCKS"))         return "Starbucks";
         if (u.contains("SUBWAY"))            return "Subway";
+        if (u.contains("ALDI"))             return "ALDI";
 
         // Fall back to first readable line
         for (String line : lines) {
@@ -358,9 +367,10 @@ public class ReceiptParserService {
                 }
             }
 
-            // Priority 2: "TOTAL SALE", "TOTAL: XX", bare "TOTAL XX"
-            // Exclude: TOTAL TAX, TOTAL NUMBER, TOTAL SAVINGS, TOTAL ITEMS
-            if (u.startsWith("TOTAL") && !isTotalExclusion(u)) {
+            // Priority 2: "TOTAL SALE", "TOTAL: XX", bare "TOTAL XX",
+            // and "T O T A L  XX" (ALDI prints the word with spaces between letters)
+            String compact = u.replaceAll("\\s+", "");
+            if ((u.startsWith("TOTAL") || compact.startsWith("TOTAL")) && !isTotalExclusion(u)) {
                 BigDecimal v = lastPrice(t);
                 if (v != null && v.compareTo(BigDecimal.ZERO) > 0
                         && (data.getTotal() == null || data.getTotal().compareTo(BigDecimal.ZERO) == 0)) {
@@ -510,6 +520,38 @@ public class ReceiptParserService {
             if (trimmed.isEmpty()) continue;
             String upper = trimmed.toUpperCase();
             if (SKIP_PREFIXES.stream().anyMatch(upper::startsWith)) continue;
+
+            // ALDI qty breakdown: "3 x  0.55" — back-fill qty/unitPrice onto the previous item
+            Matcher qtyLine = ALDI_QTY_LINE.matcher(trimmed);
+            if (qtyLine.matches()) {
+                if (!items.isEmpty()) {
+                    try {
+                        int qty = Integer.parseInt(qtyLine.group(1));
+                        BigDecimal unitPrice = new BigDecimal(qtyLine.group(2));
+                        ParsedReceiptItem last = items.get(items.size() - 1);
+                        last.setQuantity(qty);
+                        last.setUnitPrice(unitPrice);
+                    } catch (NumberFormatException ignored) {}
+                }
+                continue;
+            }
+
+            // ALDI item: "NNNNNN Name  Price.pp FA"  (6-digit item code, optional tax flag)
+            Matcher aldi = ALDI_ITEM_PATTERN.matcher(trimmed);
+            if (aldi.matches()) {
+                String name = aldi.group(1).trim();
+                BigDecimal price;
+                try { price = new BigDecimal(aldi.group(2)); } catch (NumberFormatException e) { continue; }
+                if (name.length() >= 2 && name.matches(".*[a-zA-Z].*") && price.compareTo(BigDecimal.ZERO) > 0) {
+                    ParsedReceiptItem item = new ParsedReceiptItem();
+                    item.setName(name);
+                    item.setQuantity(1);
+                    item.setTotalPrice(price);
+                    item.setUnitPrice(price);
+                    items.add(item);
+                }
+                continue;
+            }
 
             // qty + item
             Matcher m2 = QTY_ITEM_PATTERN.matcher(trimmed);
