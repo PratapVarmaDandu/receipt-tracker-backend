@@ -48,6 +48,22 @@ public class EmailService {
         send(ownerEmail, subject, body);
     }
 
+    public void sendInviteeDecision(String ownerEmail, String inviteeEmail, String action, BigDecimal shareAmount, String receiptUrl) {
+        boolean accepted = "ACCEPT".equalsIgnoreCase(action);
+        String subject = escapeHtml(inviteeEmail) + (accepted ? " accepted" : " denied") + " their expense share";
+        String color  = accepted ? "#27ae60" : "#e74c3c";
+        String heading = accepted ? "Share Accepted" : "Share Denied";
+        String body = "<div style='font-family:sans-serif;max-width:500px;margin:auto'>"
+            + "<h2 style='color:" + color + "'>" + heading + "</h2>"
+            + "<p><strong>" + escapeHtml(inviteeEmail) + "</strong> has "
+            + (accepted ? "accepted" : "denied") + " the expense share"
+            + (shareAmount != null ? " of <strong>$" + shareAmount.toPlainString() + "</strong>" : "") + ".</p>"
+            + "<p><a href='" + receiptUrl + "' style='background:" + color + ";color:#fff;padding:10px 20px;"
+            + "border-radius:6px;text-decoration:none;display:inline-block'>View Receipt</a></p>"
+            + "</div>";
+        send(ownerEmail, subject, body);
+    }
+
     public void sendOwnerDecision(String inviteeEmail, boolean approved, BigDecimal finalAmount, String note, String tokenUrl) {
         String subject = approved ? "Your change request was approved" : "Your change request was rejected";
         String color = approved ? "#27ae60" : "#e74c3c";

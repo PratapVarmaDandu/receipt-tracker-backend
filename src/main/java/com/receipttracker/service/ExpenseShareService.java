@@ -200,8 +200,16 @@ public class ExpenseShareService {
 
         String action = req.getAction();
         switch (action.toUpperCase()) {
-            case "ACCEPT" -> share.setStatus(ShareStatus.ACCEPTED);
-            case "DENY"   -> share.setStatus(ShareStatus.DENIED);
+            case "ACCEPT" -> {
+                share.setStatus(ShareStatus.ACCEPTED);
+                String receiptUrl = frontendUrl + "/receipts/" + share.getReceipt().getId();
+                emailService.sendInviteeDecision(share.getInviter().getEmail(), caller.getEmail(), "ACCEPT", share.getShareAmount(), receiptUrl);
+            }
+            case "DENY" -> {
+                share.setStatus(ShareStatus.DENIED);
+                String receiptUrl = frontendUrl + "/receipts/" + share.getReceipt().getId();
+                emailService.sendInviteeDecision(share.getInviter().getEmail(), caller.getEmail(), "DENY", share.getShareAmount(), receiptUrl);
+            }
             case "REQUEST_CHANGE" -> {
                 if (req.getCounterAmount() == null || req.getCounterAmount().compareTo(BigDecimal.ZERO) <= 0) {
                     throw new RuntimeException("counterAmount must be greater than zero");

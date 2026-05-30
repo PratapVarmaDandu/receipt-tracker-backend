@@ -54,11 +54,22 @@ Spring and nginx both accept up to 25 MB uploads; nginx upload location has 300 
 - Entity: `ExpenseShare` → table `expense_shares`; status enum: `ShareStatus`
   (`PENDING`, `ACCEPTED`, `DENIED`, `CHANGE_REQUESTED`, `CHANGE_APPROVED`, `CHANGE_REJECTED`)
 - `inviteToken` is a UUID generated in `@PrePersist`; never logged verbatim
+- Equal split divides by `invitees.size() + 1` — the +1 accounts for the owner's share
 - Public endpoint `GET /api/shares/token/**` is `permitAll()` for GET only — POST requires auth
   (enforced with `requestMatchers(HttpMethod.GET, "/api/shares/token/**")` in SecurityConfig)
+- Email notifications: invite → invitee; change-request → owner; approve/reject → invitee;
+  **accept/deny → owner** (owner gets notified whenever invitee takes any action)
 - Email: `EmailService` uses `@Autowired(required=false) JavaMailSender` — if no SMTP config,
   falls back to `log.warn`; email failures are never propagated (non-fatal)
 - Requires `GMAIL_USERNAME` + `GMAIL_APP_PASSWORD` env vars for real email delivery
+
+## Groups
+- Entity: `ExpenseGroup` → table `expense_groups` ("groups" is a MySQL reserved word — never use it as table name)
+- Entity: `GroupMember` → table `group_members`; roles: OWNER, MEMBER
+- `inviteToken` UUID on `ExpenseGroup` is the QR/link token for joining; public GET permitted
+- `GET /api/groups/join/:token` — public (no auth); `POST /api/groups/join/:token` — auth required
+- Routes: POST /api/groups, GET /api/groups/mine, GET/POST /api/groups/join/:token,
+  GET /api/groups/:id/members
 
 ## Vision AI config
 - Feature-flagged: `vision.ai.enabled=${VISION_AI_ENABLED:false}`

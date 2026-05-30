@@ -57,6 +57,7 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/error").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/shares/token/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/groups/join/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             );
