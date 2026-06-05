@@ -1,22 +1,25 @@
 package com.receipttracker.security;
 
+import com.receipttracker.config.LocalDevSecurityFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import org.springframework.http.HttpMethod;
-
-import java.util.List;
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -31,14 +34,18 @@ public class SecurityConfig {
     @Autowired
     private Environment environment;
 
+    // Only present in local/local-mysql profiles
+    @Autowired(required = false)
+    private LocalDevSecurityFilter localDevSecurityFilter;
+
     // Injected from env var FRONTEND_URL — defaults to localhost for local dev
     @Value("${app.frontend.url:http://localhost:4200}")
     private String frontendUrl;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // Check if running in local development mode
-        boolean isLocalProfile = Arrays.asList(environment.getActiveProfiles()).contains("local");
+        List<String> activeProfiles = Arrays.asList(environment.getActiveProfiles());
+        boolean isLocalProfile = activeProfiles.contains("local") || activeProfiles.contains("local-mysql");
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -52,12 +59,19 @@ public class SecurityConfig {
                 .anyRequest().permitAll()
             )
             .headers(headers -> headers.frameOptions(frame -> frame.disable())); // Allow H2 console iframe
+
+            // Run AFTER SecurityContextHolderFilter so the session restore doesn't overwrite us
+            if (localDevSecurityFilter != null) {
+                http.addFilterAfter(localDevSecurityFilter, SecurityContextHolderFilter.class);
+            }
         } else {
             // PRODUCTION/TEST: Require authentication for API endpoints
             http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/error").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/shares/token/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/groups/join/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/documents/shared/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/vehicles/access/join/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             );
@@ -89,6 +103,17 @@ public class SecurityConfig {
             );
 
         return http.build();
+    }
+
+    // Prevent Spring Boot from auto-registering LocalDevSecurityFilter as a raw servlet filter.
+    // It is registered inside the security filter chain above instead.
+    @Bean
+    @ConditionalOnBean(LocalDevSecurityFilter.class)
+    public FilterRegistrationBean<LocalDevSecurityFilter> localDevFilterRegistration(LocalDevSecurityFilter filter) {
+        FilterRegistrationBean<LocalDevSecurityFilter> reg = new FilterRegistrationBean<>();
+        reg.setFilter(filter);
+        reg.setEnabled(false);
+        return reg;
     }
 
     @Bean

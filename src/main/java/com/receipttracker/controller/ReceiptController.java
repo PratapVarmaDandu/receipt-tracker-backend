@@ -1,5 +1,6 @@
 package com.receipttracker.controller;
 
+import com.receipttracker.dto.AddReceiptToGroupRequest;
 import com.receipttracker.dto.ReceiptDTO;
 import com.receipttracker.service.ReceiptService;
 import org.slf4j.Logger;
@@ -108,6 +109,32 @@ public class ReceiptController {
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             log.error("!!! PUT /api/receipts/{} FAILED - duration={}ms, error={}", id, duration, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/vehicle")
+    public ResponseEntity<?> linkVehicle(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Long vehicleId = body.get("vehicleId") != null ? ((Number) body.get("vehicleId")).longValue() : null;
+        log.info("PUT /api/receipts/{}/vehicle - vehicleId={}", id, vehicleId);
+        try {
+            return ResponseEntity.ok(receiptService.linkToVehicle(id, vehicleId));
+        } catch (Exception e) {
+            log.error("!!! PUT /api/receipts/{}/vehicle FAILED - error={}", id, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/group")
+    public ResponseEntity<?> assignGroup(@PathVariable Long id, @RequestBody AddReceiptToGroupRequest req) {
+        log.info("PUT /api/receipts/{}/group - groupId={}", id, req.getGroupId());
+        long startTime = System.currentTimeMillis();
+        try {
+            ReceiptDTO result = receiptService.addToGroup(id, req.getGroupId());
+            log.info("<<< PUT /api/receipts/{}/group - SUCCESS: duration={}ms", id, System.currentTimeMillis() - startTime);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("!!! PUT /api/receipts/{}/group FAILED - error={}", id, e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }

@@ -81,6 +81,58 @@ public class EmailService {
         send(inviteeEmail, subject, body);
     }
 
+    public void sendDocumentShare(String to, String recipientName, String senderName,
+                                  String purpose, String message, int docCount,
+                                  String shareUrl, int expiryDays) {
+        String name = recipientName != null && !recipientName.isBlank() ? recipientName : to;
+        String purposeLabel = purpose != null && !purpose.isBlank() ? purpose : "Document Share";
+        String subject = escapeHtml(senderName) + " shared " + docCount
+                + " document" + (docCount == 1 ? "" : "s") + " with you";
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:#4f46e5;padding:24px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.3rem'>📄 Documents Shared With You</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p>Hi <strong>" + escapeHtml(name) + "</strong>,</p>"
+            + "<p><strong>" + escapeHtml(senderName) + "</strong> has shared <strong>"
+            + docCount + " document" + (docCount == 1 ? "" : "s") + "</strong> with you"
+            + " for: <em>" + escapeHtml(purposeLabel) + "</em>.</p>"
+            + (message != null && !message.isBlank()
+                ? "<blockquote style='border-left:4px solid #4f46e5;margin:16px 0;"
+                + "padding:8px 16px;background:#f8f9ff;border-radius:0 6px 6px 0;color:#374151'>"
+                + escapeHtml(message) + "</blockquote>"
+                : "")
+            + "<p style='text-align:center;margin:28px 0'>"
+            + "<a href='" + shareUrl + "' style='background:#4f46e5;color:#fff;padding:12px 28px;"
+            + "border-radius:8px;text-decoration:none;font-weight:600;display:inline-block'>"
+            + "View &amp; Download Documents</a></p>"
+            + "<p style='color:#94a3b8;font-size:12px'>This link expires in " + expiryDays + " day"
+            + (expiryDays == 1 ? "" : "s") + ". Do not forward this email.</p>"
+            + "</div></div>";
+        send(to, subject, body);
+    }
+
+    public void sendVehicleShareInvite(String to, String ownerName, String vehicleName, String inviteUrl) {
+        String subject = escapeHtml(ownerName) + " shared their vehicle with you: " + escapeHtml(vehicleName);
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:#d97706;padding:24px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.3rem'>🚗 Vehicle Shared With You</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p><strong>" + escapeHtml(ownerName) + "</strong> has shared their vehicle "
+            + "<strong>" + escapeHtml(vehicleName) + "</strong> with you.</p>"
+            + "<p>You'll be able to view all details, add maintenance records, and log fuel fill-ups.</p>"
+            + "<p style='text-align:center;margin:28px 0'>"
+            + "<a href='" + inviteUrl + "' style='background:#d97706;color:#fff;padding:12px 28px;"
+            + "border-radius:8px;text-decoration:none;font-weight:600;display:inline-block'>"
+            + "Accept Invite</a></p>"
+            + "<p style='color:#94a3b8;font-size:12px'>If you did not expect this email, you can ignore it.</p>"
+            + "</div></div>";
+        send(to, subject, body);
+    }
+
     private void send(String to, String subject, String htmlBody) {
         if (mailSender == null) {
             log.warn("EMAIL NOT SENT (no SMTP configured): to={} | subject={} | body={}", to, subject, htmlBody);

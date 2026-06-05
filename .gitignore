@@ -1,2 +1,5 @@
 target/classes/application-prod.properties
 /target
+local.env
+*.env
+.env

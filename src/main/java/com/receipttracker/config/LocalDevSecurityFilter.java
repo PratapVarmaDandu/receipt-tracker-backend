@@ -10,8 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -34,7 +34,6 @@ import java.util.Map;
  */
 @Component
 @Profile({"local", "local-mysql"})
-@Order(Ordered.HIGHEST_PRECEDENCE)
 public class LocalDevSecurityFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(LocalDevSecurityFilter.class);
@@ -51,8 +50,9 @@ public class LocalDevSecurityFilter extends OncePerRequestFilter {
                                     HttpServletResponse res,
                                     FilterChain chain) throws ServletException, IOException {
 
-        if (SecurityContextHolder.getContext().getAuthentication() == null
-                || !SecurityContextHolder.getContext().getAuthentication().isAuthenticated()) {
+        Authentication existing = SecurityContextHolder.getContext().getAuthentication();
+        if (existing == null || !existing.isAuthenticated()
+                || existing instanceof AnonymousAuthenticationToken) {
 
             userRepo.findByGoogleId(DEV_GOOGLE_ID).orElseGet(() -> {
                 User u = new User();

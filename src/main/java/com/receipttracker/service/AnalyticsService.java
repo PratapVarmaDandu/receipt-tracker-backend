@@ -61,12 +61,13 @@ public class AnalyticsService {
             BigDecimal totalEarned    = BigDecimal.ZERO;
             BigDecimal totalPotential = BigDecimal.ZERO;
 
-            Map<String, BigDecimal> byCategory      = new LinkedHashMap<>();
-            Map<String, BigDecimal> byCard          = new LinkedHashMap<>();
-            Map<String, BigDecimal> cashByCard      = new LinkedHashMap<>();
-            Map<String, BigDecimal> byMonth         = new TreeMap<>();
-            Map<String, String>     currentCards    = new LinkedHashMap<>();
-            Map<String, Integer>    countByCategory = new LinkedHashMap<>();
+            Map<String, BigDecimal>              byCategory          = new LinkedHashMap<>();
+            Map<String, BigDecimal>              byCard              = new LinkedHashMap<>();
+            Map<String, BigDecimal>              cashByCard          = new LinkedHashMap<>();
+            Map<String, BigDecimal>              byMonth             = new TreeMap<>();
+            Map<String, String>                  currentCards        = new LinkedHashMap<>();
+            Map<String, Integer>                 countByCategory     = new LinkedHashMap<>();
+            Map<String, Map<String, BigDecimal>> byMonthAndCategory  = new TreeMap<>();
 
             int processedCount = 0;
             for (Receipt r : receipts) {
@@ -89,6 +90,9 @@ public class AnalyticsService {
                 if (r.getPurchaseDateTime() != null) {
                     String month = r.getPurchaseDateTime().format(DateTimeFormatter.ofPattern("yyyy-MM"));
                     byMonth.merge(month, amt, BigDecimal::add);
+                    byMonthAndCategory
+                        .computeIfAbsent(month, k -> new LinkedHashMap<>())
+                        .merge(cat, amt, BigDecimal::add);
                 }
                 processedCount++;
             }
@@ -105,6 +109,7 @@ public class AnalyticsService {
             dto.setSpendingByCard(byCard);
             dto.setCashbackByCard(cashByCard);
             dto.setSpendingByMonth(byMonth);
+            dto.setSpendingByCategoryPerMonth(byMonthAndCategory);
             dto.setTotalReceipts(receipts.size());
             dto.setAvgReceiptValue(receipts.isEmpty() ? BigDecimal.ZERO
                     : totalSpending.divide(BigDecimal.valueOf(receipts.size()), 2, RoundingMode.HALF_UP));

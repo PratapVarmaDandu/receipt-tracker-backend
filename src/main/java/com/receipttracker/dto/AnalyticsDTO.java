@@ -17,6 +17,7 @@ public class AnalyticsDTO {
     private Map<String, BigDecimal> spendingByCard;
     private Map<String, BigDecimal> cashbackByCard;
     private Map<String, BigDecimal> spendingByMonth;
+    private Map<String, Map<String, BigDecimal>> spendingByCategoryPerMonth;
 
     private List<CashbackSuggestionDTO> suggestions;
     private List<CategoryBreakdownDTO> categoryBreakdown;

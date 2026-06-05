@@ -4,6 +4,7 @@ import com.receipttracker.model.ShareStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class ExpenseShareDTO {
     private Long id;
@@ -18,6 +19,8 @@ public class ExpenseShareDTO {
     private String changeResponseNote;
     private ShareStatus status;
     private String inviteToken;
+    private String splitType;
+    private List<ExpenseShareItemDTO> items;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -47,6 +50,10 @@ public class ExpenseShareDTO {
     public void setStatus(ShareStatus status) { this.status = status; }
     public String getInviteToken() { return inviteToken; }
     public void setInviteToken(String inviteToken) { this.inviteToken = inviteToken; }
+    public String getSplitType() { return splitType; }
+    public void setSplitType(String splitType) { this.splitType = splitType; }
+    public List<ExpenseShareItemDTO> getItems() { return items; }
+    public void setItems(List<ExpenseShareItemDTO> items) { this.items = items; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

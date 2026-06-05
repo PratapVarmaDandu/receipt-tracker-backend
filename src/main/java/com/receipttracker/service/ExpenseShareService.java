@@ -2,7 +2,9 @@ package com.receipttracker.service;
 
 import com.receipttracker.dto.*;
 import com.receipttracker.model.*;
+import com.receipttracker.repository.ExpenseShareItemRepository;
 import com.receipttracker.repository.ExpenseShareRepository;
+import com.receipttracker.repository.ReceiptItemRepository;
 import com.receipttracker.repository.ReceiptRepository;
 import com.receipttracker.repository.UserRepository;
 import org.slf4j.Logger;
@@ -17,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -27,7 +31,9 @@ public class ExpenseShareService {
     private static final Logger log = LoggerFactory.getLogger(ExpenseShareService.class);
 
     @Autowired private ExpenseShareRepository shareRepo;
+    @Autowired private ExpenseShareItemRepository shareItemRepo;
     @Autowired private ReceiptRepository receiptRepo;
+    @Autowired private ReceiptItemRepository receiptItemRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private EmailService emailService;
 
@@ -48,18 +54,27 @@ public class ExpenseShareService {
 
     @Transactional
     public List<ExpenseShareDTO> createShares(Long receiptId, CreateShareRequest req) {
-        log.info(">>> createShares receiptId={} splitType={} count={}",
-                receiptId, req.getSplitType(), req.getInvitees().size());
+        log.info(">>> createShares receiptId={} splitType={}", receiptId, req.getSplitType());
 
         User inviter = currentUser();
         Receipt receipt = receiptRepo.findById(receiptId)
                 .orElseThrow(() -> new RuntimeException("Receipt not found: " + receiptId));
 
-        // Fix: reject demo receipts (user == null) and receipts owned by someone else
         if (receipt.getUser() == null || !receipt.getUser().getId().equals(inviter.getId())) {
             throw new RuntimeException("You do not own this receipt");
         }
 
+        if (receipt.getTotal() == null || receipt.getTotal().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("Receipt has no valid total amount to split");
+        }
+
+        String splitType = req.getSplitType();
+
+        if ("ITEM_BASED".equalsIgnoreCase(splitType)) {
+            return createItemBasedShares(receipt, inviter, req);
+        }
+
+        // ── EQUAL / CUSTOM path (unchanged logic) ────────────────────────────
         List<ShareInviteItem> invitees = req.getInvitees();
         if (invitees == null || invitees.isEmpty()) {
             throw new RuntimeException("At least one invitee is required");
@@ -68,29 +83,22 @@ public class ExpenseShareService {
             throw new RuntimeException("Cannot invite more than 50 people at once");
         }
 
-        // Validate emails and amounts upfront
         for (ShareInviteItem item : invitees) {
             if (item.getEmail() == null || !item.getEmail().contains("@")) {
                 throw new RuntimeException("Invalid email address: " + item.getEmail());
             }
-            if ("CUSTOM".equalsIgnoreCase(req.getSplitType())) {
+            if ("CUSTOM".equalsIgnoreCase(splitType)) {
                 if (item.getAmount() == null || item.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
                     throw new RuntimeException("Share amount must be greater than zero for: " + item.getEmail());
                 }
             }
         }
 
-        if (receipt.getTotal() == null || receipt.getTotal().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Receipt has no valid total amount to split");
-        }
-
-        boolean isEqual = "EQUAL".equalsIgnoreCase(req.getSplitType());
-        // Divide by (invitees + 1) so the owner's share is also accounted for
+        boolean isEqual = "EQUAL".equalsIgnoreCase(splitType);
         BigDecimal equalAmount = isEqual
                 ? receipt.getTotal().divide(BigDecimal.valueOf(invitees.size() + 1), 2, RoundingMode.HALF_UP)
                 : null;
 
-        // Collect existing invitee emails for this receipt to prevent duplicates
         Set<String> alreadyInvited = shareRepo.findByReceiptId(receiptId).stream()
                 .filter(s -> s.getStatus() == ShareStatus.PENDING
                           || s.getStatus() == ShareStatus.CHANGE_REQUESTED
@@ -109,16 +117,115 @@ public class ExpenseShareService {
             share.setInviter(inviter);
             share.setInviteeEmail(email);
             share.setShareAmount(amount);
+            share.setSplitType(splitType.toUpperCase());
             share.setStatus(ShareStatus.PENDING);
             return shareRepo.save(share);
         }).collect(Collectors.toList());
 
         created.forEach(share -> {
             String tokenUrl = frontendUrl + "/share/" + share.getInviteToken();
-            emailService.sendInvite(share.getInviteeEmail(), receipt.getStoreName(), inviter.getName(), share.getShareAmount(), tokenUrl);
+            emailService.sendInvite(share.getInviteeEmail(), receipt.getStoreName(),
+                    inviter.getName(), share.getShareAmount(), tokenUrl);
         });
 
-        log.info("<<< createShares created={} shares for receiptId={}", created.size(), receiptId);
+        log.info("<<< createShares created={} {} shares for receiptId={}", created.size(), splitType, receiptId);
+        return created.stream().map(this::toDTO).collect(Collectors.toList());
+    }
+
+    // ── Item-based split ──────────────────────────────────────────────────────
+
+    private List<ExpenseShareDTO> createItemBasedShares(Receipt receipt, User inviter, CreateShareRequest req) {
+        List<ItemAssignment> assignments = req.getItemAssignments();
+        if (assignments == null || assignments.isEmpty()) {
+            throw new RuntimeException("itemAssignments required for ITEM_BASED split");
+        }
+        if (assignments.size() > 50) {
+            throw new RuntimeException("Cannot invite more than 50 people at once");
+        }
+
+        // Build map of valid receipt item ids → item entity
+        Map<Long, ReceiptItem> receiptItems = receipt.getItems().stream()
+                .collect(Collectors.toMap(ReceiptItem::getId, i -> i));
+
+        // Effective tax rate from the receipt itself
+        BigDecimal taxRate = BigDecimal.ZERO;
+        if (receipt.getSubtotal() != null && receipt.getTax() != null
+                && receipt.getSubtotal().compareTo(BigDecimal.ZERO) > 0) {
+            taxRate = receipt.getTax().divide(receipt.getSubtotal(), 6, RoundingMode.HALF_UP);
+        }
+        final BigDecimal effectiveTaxRate = taxRate;
+
+        Set<String> alreadyInvited = shareRepo.findByReceiptId(receipt.getId()).stream()
+                .filter(s -> s.getStatus() == ShareStatus.PENDING
+                          || s.getStatus() == ShareStatus.CHANGE_REQUESTED
+                          || s.getStatus() == ShareStatus.CHANGE_APPROVED)
+                .map(s -> s.getInviteeEmail().toLowerCase())
+                .collect(Collectors.toSet());
+
+        List<ExpenseShare> created = new ArrayList<>();
+
+        for (ItemAssignment assignment : assignments) {
+            if (assignment.getEmail() == null || !assignment.getEmail().contains("@")) {
+                throw new RuntimeException("Invalid email: " + assignment.getEmail());
+            }
+            if (assignment.getItemIds() == null || assignment.getItemIds().isEmpty()) {
+                throw new RuntimeException("No items assigned to: " + assignment.getEmail());
+            }
+
+            String email = assignment.getEmail().trim().toLowerCase();
+            if (alreadyInvited.contains(email)) {
+                throw new RuntimeException("An active invite already exists for: " + email);
+            }
+
+            // Validate all itemIds belong to this receipt and compute totals
+            BigDecimal itemSubtotal = BigDecimal.ZERO;
+            BigDecimal itemTax = BigDecimal.ZERO;
+            List<ExpenseShareItem> shareItems = new ArrayList<>();
+
+            for (Long itemId : assignment.getItemIds()) {
+                ReceiptItem ri = receiptItems.get(itemId);
+                if (ri == null) {
+                    throw new RuntimeException("Item " + itemId + " does not belong to receipt " + receipt.getId());
+                }
+                BigDecimal price = ri.getTotalPrice() != null ? ri.getTotalPrice() : BigDecimal.ZERO;
+                BigDecimal taxForItem = ri.isTaxable()
+                        ? price.multiply(effectiveTaxRate).setScale(2, RoundingMode.HALF_UP)
+                        : BigDecimal.ZERO;
+
+                itemSubtotal = itemSubtotal.add(price);
+                itemTax = itemTax.add(taxForItem);
+
+                ExpenseShareItem si = new ExpenseShareItem();
+                si.setReceiptItem(ri);
+                si.setItemTotal(price);
+                si.setTaxAmount(taxForItem);
+                si.setTaxRate(effectiveTaxRate);
+                shareItems.add(si);
+            }
+
+            BigDecimal shareTotal = itemSubtotal.add(itemTax).setScale(2, RoundingMode.HALF_UP);
+
+            ExpenseShare share = new ExpenseShare();
+            share.setReceipt(receipt);
+            share.setInviter(inviter);
+            share.setInviteeEmail(email);
+            share.setShareAmount(shareTotal);
+            share.setSplitType("ITEM_BASED");
+            share.setStatus(ShareStatus.PENDING);
+            ExpenseShare savedShare = shareRepo.save(share);
+
+            // Link share items now that the share has an id
+            for (ExpenseShareItem si : shareItems) {
+                si.setShare(savedShare);
+                shareItemRepo.save(si);
+            }
+            created.add(savedShare);
+
+            String tokenUrl = frontendUrl + "/share/" + savedShare.getInviteToken();
+            emailService.sendInvite(email, receipt.getStoreName(), inviter.getName(), shareTotal, tokenUrl);
+        }
+
+        log.info("<<< createShares (ITEM_BASED) created={} shares for receiptId={}", created.size(), receipt.getId());
         return created.stream().map(this::toDTO).collect(Collectors.toList());
     }
 
@@ -158,8 +265,10 @@ public class ExpenseShareService {
         dto.setCounterNote(share.getCounterNote());
         dto.setChangeResponseNote(share.getChangeResponseNote());
         dto.setInviteeLinkNeeded(share.getInvitee() == null);
+        dto.setSplitType(share.getSplitType());
 
-        List<ReceiptItemDTO> items = receipt.getItems().stream().map(item -> {
+        // All receipt items (for context display)
+        List<ReceiptItemDTO> allItems = receipt.getItems().stream().map(item -> {
             ReceiptItemDTO idto = new ReceiptItemDTO();
             idto.setId(item.getId());
             idto.setName(item.getName());
@@ -171,9 +280,26 @@ public class ExpenseShareService {
             idto.setTaxable(item.isTaxable());
             return idto;
         }).collect(Collectors.toList());
-        dto.setItems(items);
+        dto.setItems(allItems);
 
-        log.debug("<<< getShareByToken token={} status={}", token, share.getStatus());
+        // For ITEM_BASED: populate assigned-item breakdown
+        if ("ITEM_BASED".equalsIgnoreCase(share.getSplitType())) {
+            List<ExpenseShareItem> shareItems = shareItemRepo.findByShare(share);
+            List<ExpenseShareItemDTO> assigned = shareItems.stream().map(this::toShareItemDTO)
+                    .collect(Collectors.toList());
+            dto.setAssignedItems(assigned);
+
+            BigDecimal sub = shareItems.stream()
+                    .map(ExpenseShareItem::getItemTotal)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal tax = shareItems.stream()
+                    .map(ExpenseShareItem::getTaxAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            dto.setItemSubtotal(sub.setScale(2, RoundingMode.HALF_UP));
+            dto.setItemTax(tax.setScale(2, RoundingMode.HALF_UP));
+        }
+
+        log.debug("<<< getShareByToken splitType={} status={}", share.getSplitType(), share.getStatus());
         return dto;
     }
 
@@ -203,12 +329,14 @@ public class ExpenseShareService {
             case "ACCEPT" -> {
                 share.setStatus(ShareStatus.ACCEPTED);
                 String receiptUrl = frontendUrl + "/receipts/" + share.getReceipt().getId();
-                emailService.sendInviteeDecision(share.getInviter().getEmail(), caller.getEmail(), "ACCEPT", share.getShareAmount(), receiptUrl);
+                emailService.sendInviteeDecision(share.getInviter().getEmail(), caller.getEmail(),
+                        "ACCEPT", share.getShareAmount(), receiptUrl);
             }
             case "DENY" -> {
                 share.setStatus(ShareStatus.DENIED);
                 String receiptUrl = frontendUrl + "/receipts/" + share.getReceipt().getId();
-                emailService.sendInviteeDecision(share.getInviter().getEmail(), caller.getEmail(), "DENY", share.getShareAmount(), receiptUrl);
+                emailService.sendInviteeDecision(share.getInviter().getEmail(), caller.getEmail(),
+                        "DENY", share.getShareAmount(), receiptUrl);
             }
             case "REQUEST_CHANGE" -> {
                 if (req.getCounterAmount() == null || req.getCounterAmount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -218,13 +346,8 @@ public class ExpenseShareService {
                 share.setCounterAmount(req.getCounterAmount());
                 share.setCounterNote(req.getCounterNote());
                 String tokenUrl = frontendUrl + "/share/" + token;
-                emailService.sendChangeRequest(
-                        share.getInviter().getEmail(),
-                        caller.getEmail(),
-                        req.getCounterAmount(),
-                        req.getCounterNote(),
-                        tokenUrl
-                );
+                emailService.sendChangeRequest(share.getInviter().getEmail(), caller.getEmail(),
+                        req.getCounterAmount(), req.getCounterNote(), tokenUrl);
             }
             default -> throw new RuntimeException("Unknown action: " + action);
         }
@@ -267,13 +390,8 @@ public class ExpenseShareService {
         }
 
         String tokenUrl = frontendUrl + "/share/" + share.getInviteToken();
-        emailService.sendOwnerDecision(
-                share.getInviteeEmail(),
-                "APPROVE".equalsIgnoreCase(action),
-                share.getShareAmount(),
-                req.getResponseNote(),
-                tokenUrl
-        );
+        emailService.sendOwnerDecision(share.getInviteeEmail(), "APPROVE".equalsIgnoreCase(action),
+                share.getShareAmount(), req.getResponseNote(), tokenUrl);
 
         ExpenseShare saved = shareRepo.save(share);
         log.info("<<< processOwnerAction shareId={} newStatus={}", shareId, saved.getStatus());
@@ -306,8 +424,24 @@ public class ExpenseShareService {
         dto.setChangeResponseNote(share.getChangeResponseNote());
         dto.setStatus(share.getStatus());
         dto.setInviteToken(share.getInviteToken());
+        dto.setSplitType(share.getSplitType());
         dto.setCreatedAt(share.getCreatedAt());
         dto.setUpdatedAt(share.getUpdatedAt());
+
+        if ("ITEM_BASED".equalsIgnoreCase(share.getSplitType()) && share.getItems() != null) {
+            dto.setItems(share.getItems().stream().map(this::toShareItemDTO).collect(Collectors.toList()));
+        }
+        return dto;
+    }
+
+    private ExpenseShareItemDTO toShareItemDTO(ExpenseShareItem si) {
+        ExpenseShareItemDTO dto = new ExpenseShareItemDTO();
+        dto.setReceiptItemId(si.getReceiptItem().getId());
+        dto.setItemName(si.getReceiptItem().getName());
+        dto.setItemTotal(si.getItemTotal());
+        dto.setTaxAmount(si.getTaxAmount());
+        dto.setTaxRate(si.getTaxRate());
+        dto.setTaxable(si.getReceiptItem().isTaxable());
         return dto;
     }
 }

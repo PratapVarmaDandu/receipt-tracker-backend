@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -59,6 +61,12 @@ public class ExpenseShare {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // populated for ITEM_BASED shares; empty for EQUAL/CUSTOM
+    @OneToMany(mappedBy = "share", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    private List<ExpenseShareItem> items = new ArrayList<>();
+
+    private String splitType;
 
     @PrePersist
     void prePersist() {

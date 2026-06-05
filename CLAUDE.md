@@ -31,6 +31,7 @@ com.receipttracker
 - Monetary fields: always `BigDecimal`, never `double`/`float`
 - `Receipt.items` uses `CascadeType.ALL` + `orphanRemoval=true` — on update, clear the list and re-add
 - `paymentCard` format: `{CARDBANK}_{CARDTYPE}_{LASTFOUR}` (e.g. `CHASE_VISA_1234`)
+- `Receipt.vehicle` — nullable `@ManyToOne Vehicle`; set via `PUT /api/receipts/{id}/vehicle`; `ReceiptDTO` exposes `vehicleId` + `vehicleName` (computed: `"{year} {make} {model}"`)
 - AWS credentials in `User` are AES-256-GCM encrypted — always go through `EncryptionService`
 - `@PrePersist` sets `createdAt`/`uploadedAt` — don't set manually
 
@@ -71,7 +72,20 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 - Entity: `ExpenseShare` → table `expense_shares`; status enum: `ShareStatus`
   (`PENDING`, `ACCEPTED`, `DENIED`, `CHANGE_REQUESTED`, `CHANGE_APPROVED`, `CHANGE_REJECTED`)
 - `inviteToken` is a UUID generated in `@PrePersist`; never logged verbatim
+- `splitType` field on `ExpenseShare`: `EQUAL`, `CUSTOM`, or `ITEM_BASED`
 - Equal split divides by `invitees.size() + 1` — the +1 accounts for the owner's share
+- **ITEM_BASED split**: `CreateShareRequest.itemAssignments` maps each invitee email → list of
+  `ReceiptItem` ids. All ids must belong to the receipt or a `RuntimeException` is thrown.
+  Tax: `effectiveTaxRate = receipt.tax / receipt.subtotal` (0 if subtotal is null/0).
+  For each taxable item: `taxAmount = item.totalPrice * effectiveTaxRate`.
+  Share total = `Σ(itemTotalPrice) + Σ(taxAmount for taxable items)`, rounded HALF_UP to 2 dp.
+  Item rows stored in `ExpenseShareItem` (table `expense_share_items`).
+- Entity: `ExpenseShareItem` → `(id, share_id FK, receipt_item_id FK, itemTotal, taxAmount, taxRate)`
+- `ExpenseShareItemRepository.findByShare(share)` used in `getShareByToken` to populate
+  `ShareViewDTO.assignedItems`, `itemSubtotal`, `itemTax` for ITEM_BASED shares
+- Receipt ↔ Group link: `Receipt.group` is a nullable `@ManyToOne ExpenseGroup`.
+  `ReceiptService.addToGroup(receiptId, groupId)` validates receipt ownership + group membership;
+  `groupId == null` unassigns. Exposed via `PUT /api/receipts/{id}/group`.
 - Public endpoint `GET /api/shares/token/**` is `permitAll()` for GET only — POST requires auth
   (enforced with `requestMatchers(HttpMethod.GET, "/api/shares/token/**")` in SecurityConfig)
 - Email notifications: invite → invitee; change-request → owner; approve/reject → invitee;
@@ -79,6 +93,48 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 - Email: `EmailService` uses `@Autowired(required=false) JavaMailSender` — if no SMTP config,
   falls back to `log.warn`; email failures are never propagated (non-fatal)
 - Requires `GMAIL_USERNAME` + `GMAIL_APP_PASSWORD` env vars for real email delivery
+
+## Document Vault
+- Entities: `Document` → `documents`; `DocumentNextStep` → `document_next_steps`; `DocumentShare` → `document_shares`; join table `document_share_docs`
+- `DocumentCategory` enum: RESUME, TAX, INCOME, IMMIGRATION, OTHER
+- Status is computed in `DocumentService.toDTO()` — not stored: `expiryDate == null → ACTIVE`; within 90 days → `EXPIRING_SOON`; past → `EXPIRED`
+- Files stored as UUID filenames under `{storagePathResolver.asPath()}/documents/{userId}/` — never expose user-supplied filenames in the file system path
+- Allowed MIME types enforced in `DocumentService.ALLOWED_MIME_TYPES` + `ALLOWED_EXTENSIONS` — both must pass or upload throws
+- `DocumentShare.shareToken` is UUID generated in `@PrePersist`; never logged
+- Share expiry is checked in `getByToken()` and `downloadViaToken()` — throws if past `expiresAt`
+- Download endpoint (`GET /api/documents/{id}/download`) verifies ownership; download via token verifies document is in the share's document list
+- `DocumentController` sanitizes `Content-Disposition` filename (strips non-ASCII characters)
+- `GET /api/documents/shared/**` is `permitAll()` — scoped to GET only in `SecurityConfig` (same pattern as expense shares)
+- `DocumentService.getSummary()` is called on every dashboard load — keep it lightweight (one DB query + in-memory grouping)
+- `EmailService.sendDocumentShare()` follows the same non-fatal pattern as other email methods
+
+## Garage / Vehicle Maintenance Tracking
+- Entities: `Vehicle`, `MaintenanceRecord`, `FuelRecord`, `VehicleAccess` + enums `MaintenanceType`, `FuelType`, `VehicleAccess.AccessStatus`
+- Tables: `vehicles`, `maintenance_records`, `fuel_records`, `vehicle_access`
+- `VehicleAccess` — `(id, vehicle_id FK, user_id FK nullable, invitee_email, status PENDING/ACCEPTED/REVOKED, invite_token UUID, granted_at)`; unique on `(vehicle_id, invitee_email)`; `user_id` is null until the invitee accepts
+- Access control in `VehicleService`: `requireOwned(id)` for owner-only ops (delete vehicle, manage sharing, update metadata, add/remove photos); `requireCanView(id)` for everything else (view, add maintenance, add fuel, etc.)
+- `listMine()` returns owned vehicles + ACCEPTED shared vehicles; shared entries have `isShared=true`, `ownerName` set
+- `VehicleDTO` has `isShared`, `ownerName`, `sharedWith: List<VehicleAccessDTO>` (only populated on `getById` for owners)
+- `Vehicle.photoFilenames` is an `@ElementCollection` stored in a join table `vehicle_photos` (one row per photo)
+- `MaintenanceRecord.linkedReceipt` is a nullable FK to `Receipt` — users can link fuel/maintenance to scanned receipts
+- `FuelRecord` stores fill-up details; MPG is computed in `VehicleService` from consecutive full-tank fills
+- `MaintenanceScheduleService` provides hardcoded OEM-style intervals (oil change 7.5K mi, tire rotation 7.5K mi, etc.) — no external API; intervals are published by manufacturers
+- Schedule status computed: overdue if current mileage ≥ due mileage OR current date ≥ due date; due-soon if within 500 miles or 30 days
+- Next service summary: "Oil Change overdue by 200 mi" — used on vehicle card / dashboard widget
+- `NhtsaApiService` proxies free NHTSA APIs (no auth):
+  - `GET /api/nhtsa/makes` — all car makes, cached 24h
+  - `GET /api/nhtsa/models?make={name}&year={year}` — models for a make+year, cached 12h
+  - `GET /api/nhtsa/vin/{vin}?year={y}` — decodes VIN (optional year), returns make/model/trim
+  - `GET /api/vehicles/{id}/recalls` — delegates to NhtsaApiService, calls NHTSA Recalls API
+- `VehicleReportService` generates a multi-page PDF ("Vehicle for Sale" report) using Apache PDFBox 3.0.3:
+  - Page 1: vehicle specs (make/model/year/VIN/color), registration (license plate, tag expiry), insurance, purchase info, summary (total maintenance cost, avg MPG, service count)
+  - Page 2: full service history table (date, service type, mileage, cost, provider)
+  - Page 3: fuel log table + open recalls with campaign numbers and summaries
+  - Report is non-PDF-encrypted, safe to share; endpoint: `GET /api/vehicles/{id}/report` → binary response with `Content-Disposition: attachment`
+- File storage: photos stored under `{storagePathResolver.asPath()}/vehicles/{vehicleId}/` as UUID names; MIME types validated (JPEG, PNG, WebP, HEIC, PDF)
+- Access control: all vehicle operations check `Vehicle.user == currentUser()`; no sharing model
+- **30-day edit window**: `PUT /api/vehicles/{v}/maintenance/{r}` and `PUT /api/vehicles/{v}/fuel/{r}` check `createdAt.isBefore(now - 30 days)` and throw if expired; frontend enforces the same check client-side before showing the Edit button
+- `Vehicle.modelYear` (not `year`) — `year` is a reserved keyword in H2; field renamed to avoid DDL failures
 
 ## Groups
 - Entity: `ExpenseGroup` → table `expense_groups` ("groups" is a MySQL reserved word — never use it as table name)
@@ -93,6 +149,10 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 - Set `ANTHROPIC_API_KEY` + `VISION_AI_ENABLED=true` in `local.env` to enable
 - PDFs are rendered page-by-page to PNG before sending (up to `vision.ai.max-pdf-pages`, default 5)
 - Model: `claude-sonnet-4-6` (override with `VISION_AI_MODEL`)
+
+## Analytics
+- `AnalyticsDTO` includes `spendingByCategoryPerMonth: Map<month, Map<category, amount>>` — computed in `AnalyticsService` alongside `spendingByMonth`; used by the MoM comparison chart on the dashboard
+- Month key format: `"yyyy-MM"` (e.g. `"2025-06"`); category keys match `StoreType` enum names
 
 ## Cashback engine
 - Rates live in `CashbackService.CARD_RATES` static map (card → category → %)

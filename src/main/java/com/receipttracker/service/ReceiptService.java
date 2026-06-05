@@ -2,11 +2,16 @@ package com.receipttracker.service;
 
 import com.receipttracker.config.StoragePathResolver;
 import com.receipttracker.dto.*;
+import com.receipttracker.model.ExpenseGroup;
 import com.receipttracker.model.Receipt;
 import com.receipttracker.model.ReceiptItem;
 import com.receipttracker.model.User;
+import com.receipttracker.model.Vehicle;
+import com.receipttracker.repository.ExpenseGroupRepository;
+import com.receipttracker.repository.GroupMemberRepository;
 import com.receipttracker.repository.ReceiptRepository;
 import com.receipttracker.repository.UserRepository;
+import com.receipttracker.repository.VehicleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +37,9 @@ public class ReceiptService {
 
     @Autowired private ReceiptRepository receiptRepo;
     @Autowired private UserRepository userRepository;
+    @Autowired private ExpenseGroupRepository groupRepo;
+    @Autowired private GroupMemberRepository memberRepo;
+    @Autowired private VehicleRepository vehicleRepo;
     @Autowired private OcrService ocrService;
     @Autowired private ReceiptParserService parserService;
     @Autowired private CashbackService cashbackService;
@@ -261,6 +269,58 @@ public class ReceiptService {
     }
 
     @Transactional
+    public ReceiptDTO addToGroup(Long receiptId, Long groupId) {
+        log.info("TRANSACTION: addToGroup START - receiptId={} groupId={}", receiptId, groupId);
+        User caller = currentUser();
+
+        Receipt receipt = receiptRepo.findById(receiptId)
+                .orElseThrow(() -> new RuntimeException("Receipt not found: " + receiptId));
+
+        if (receipt.getUser() == null || !receipt.getUser().getId().equals(caller.getId())) {
+            throw new RuntimeException("You do not own this receipt");
+        }
+
+        if (groupId == null) {
+            receipt.setGroup(null);
+            log.info("<<< addToGroup: removed group from receiptId={}", receiptId);
+        } else {
+            ExpenseGroup group = groupRepo.findById(groupId)
+                    .orElseThrow(() -> new RuntimeException("Group not found: " + groupId));
+            if (!memberRepo.existsByGroupAndUser(group, caller)) {
+                throw new RuntimeException("You are not a member of this group");
+            }
+            receipt.setGroup(group);
+            log.info("<<< addToGroup: assigned receiptId={} to groupId={}", receiptId, groupId);
+        }
+
+        return toDTO(receiptRepo.save(receipt));
+    }
+
+    @Transactional
+    public ReceiptDTO linkToVehicle(Long receiptId, Long vehicleId) {
+        log.info("TRANSACTION: linkToVehicle START - receiptId={} vehicleId={}", receiptId, vehicleId);
+        User caller = currentUser();
+        Receipt receipt = receiptRepo.findById(receiptId)
+                .orElseThrow(() -> new RuntimeException("Receipt not found: " + receiptId));
+        if (receipt.getUser() == null || !receipt.getUser().getId().equals(caller.getId())) {
+            throw new RuntimeException("You do not own this receipt");
+        }
+        if (vehicleId == null) {
+            receipt.setVehicle(null);
+            log.info("<<< linkToVehicle: removed vehicle link from receiptId={}", receiptId);
+        } else {
+            Vehicle vehicle = vehicleRepo.findById(vehicleId)
+                    .orElseThrow(() -> new RuntimeException("Vehicle not found: " + vehicleId));
+            if (!vehicle.getUser().getId().equals(caller.getId())) {
+                throw new RuntimeException("You do not own this vehicle");
+            }
+            receipt.setVehicle(vehicle);
+            log.info("<<< linkToVehicle: linked receiptId={} to vehicleId={}", receiptId, vehicleId);
+        }
+        return toDTO(receiptRepo.save(receipt));
+    }
+
+    @Transactional
     public void delete(Long id) {
         long startTime = System.currentTimeMillis();
         log.info("TRANSACTION: delete START - receiptId={}", id);
@@ -311,6 +371,16 @@ public class ReceiptService {
         dto.setTotal(r.getTotal());
         dto.setImageFileName(r.getImageFileName());
         dto.setUploadedAt(r.getUploadedAt());
+
+        if (r.getGroup() != null) {
+            dto.setGroupId(r.getGroup().getId());
+            dto.setGroupName(r.getGroup().getName());
+        }
+
+        if (r.getVehicle() != null) {
+            dto.setVehicleId(r.getVehicle().getId());
+            dto.setVehicleName(r.getVehicle().getModelYear() + " " + r.getVehicle().getMake() + " " + r.getVehicle().getModel());
+        }
 
         if (r.getItems() != null) {
             dto.setItems(r.getItems().stream().map(this::toItemDTO).collect(Collectors.toList()));
