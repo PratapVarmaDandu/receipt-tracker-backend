@@ -5,8 +5,10 @@ COPY pom.xml .
 # Cache dependencies separately so rebuilds are fast
 RUN mvn dependency:go-offline -q
 COPY src ./src
-# -Pnewrelic downloads newrelic.jar to newrelic/newrelic.jar alongside the app JAR
-RUN mvn package -DskipTests -Pnewrelic -q
+RUN mvn package -DskipTests -q && \
+    mkdir -p newrelic && \
+    curl -fsSL -o newrelic/newrelic.jar \
+    "https://repo1.maven.org/maven2/com/newrelic/agent/java/newrelic-agent/8.12.0/newrelic-agent-8.12.0.jar"
 
 # ── Stage 2: Lean runtime image with Tesseract OCR ────────────────────────────
 FROM eclipse-temurin:17-jre-jammy
