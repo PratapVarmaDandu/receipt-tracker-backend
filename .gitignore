@@ -4,6 +4,20 @@ local.env
 *.env
 .env
 
+# Runtime data — never commit
+uploads/
+data/
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
 # New Relic — agent binary and runtime logs (newrelic.yml IS tracked)
 newrelic/newrelic.jar
 newrelic/logs/
