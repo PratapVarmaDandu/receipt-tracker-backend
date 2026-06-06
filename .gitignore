@@ -3,3 +3,8 @@ target/classes/application-prod.properties
 local.env
 *.env
 .env
+
+# New Relic — agent binary and runtime logs (newrelic.yml IS tracked)
+newrelic/newrelic.jar
+newrelic/logs/
+newrelic/newrelic_agent*.log

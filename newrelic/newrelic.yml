@@ -1,0 +1,80 @@
+# New Relic Java Agent Configuration
+#
+# One-time setup:
+#   1. Download agent JAR:  cd receipt-tracker-backend && mvn package -Pnewrelic
+#   2. Set env vars in Oracle / local.env:
+#        NR_LICENSE_KEY  — New Relic ingest license key
+#        NR_APP_NAME     — e.g. "steward-prod" or "steward-dev"
+#   3. Start with javaagent:
+#        java -javaagent:newrelic/newrelic.jar -jar target/receipt-tracker-backend-*.jar
+#      (start.sh adds -javaagent automatically when NR_LICENSE_KEY is set)
+#
+# Database monitoring:
+#   JDBC/JPA/Hibernate queries are auto-instrumented — no extra config needed.
+#   For MySQL server-level metrics (connections, buffer pool, etc.) install the
+#   New Relic Infrastructure agent + MySQL integration on the Oracle VM.
+
+common: &default_settings
+
+  # ── Identity ────────────────────────────────────────────────────────────────
+  license_key: '${NR_LICENSE_KEY}'
+  app_name: '${NR_APP_NAME}'
+
+  # ── Agent logging (separate from app logs) ───────────────────────────────────
+  log_level: info
+  # Logs written to newrelic/logs/ relative to the agent JAR location.
+  # That directory is gitignored.
+
+  # ── Distributed tracing ───────────────────────────────────────────────────────
+  distributed_tracing:
+    enabled: true
+
+  # ── Transaction traces ────────────────────────────────────────────────────────
+  transaction_tracer:
+    enabled: true
+    transaction_threshold: apdex_f
+    # Obfuscate SQL parameter values — never log real user data
+    record_sql: obfuscated
+    log_sql: false
+    explain_enabled: true
+    explain_threshold: 500     # ms — log slow-query explain plans above this
+
+  # ── Error collector ───────────────────────────────────────────────────────────
+  error_collector:
+    enabled: true
+    ignore_status_codes: 404   # don't count 404s as errors in NR
+
+  # ── Browser monitoring ────────────────────────────────────────────────────────
+  # Disabled here — frontend uses the @newrelic/browser-agent npm package instead
+  browser_monitoring:
+    auto_instrument: false
+
+  # ── Application logging / log forwarding to NR Logs ──────────────────────────
+  # The agent intercepts SLF4J/Logback automatically and ships logs to NR Logs.
+  # No logback changes needed.
+  application_logging:
+    enabled: true
+    forwarding:
+      enabled: true
+      max_samples_stored: 10000
+    metrics:
+      enabled: true
+    # local_decorating adds NR trace IDs to console output — left off to keep
+    # the existing logback format clean; forwarding already links logs to traces.
+    local_decorating:
+      enabled: false
+
+  # ── JMX + thread profiler ────────────────────────────────────────────────────
+  jmx:
+    enabled: true
+  thread_profiler:
+    enabled: true
+
+  high_security: false
+
+# Profile-specific overrides (agent picks the block matching -Dnewrelic.environment)
+production:
+  <<: *default_settings
+
+development:
+  <<: *default_settings

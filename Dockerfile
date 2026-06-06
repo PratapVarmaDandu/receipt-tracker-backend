@@ -5,7 +5,8 @@ COPY pom.xml .
 # Cache dependencies separately so rebuilds are fast
 RUN mvn dependency:go-offline -q
 COPY src ./src
-RUN mvn package -DskipTests -q
+# -Pnewrelic downloads newrelic.jar to newrelic/newrelic.jar alongside the app JAR
+RUN mvn package -DskipTests -Pnewrelic -q
 
 # ── Stage 2: Lean runtime image with Tesseract OCR ────────────────────────────
 FROM eclipse-temurin:17-jre-jammy
@@ -35,7 +36,14 @@ ENV UPLOAD_DIR=/app/uploads
 # Copy the built JAR
 COPY --from=build /app/target/*.jar app.jar
 
+# New Relic APM agent — bundled so the image is self-contained.
+# Activated at runtime via JAVA_TOOL_OPTIONS env var in docker-compose / .env.
+# When JAVA_TOOL_OPTIONS is not set the agent is never attached — zero impact.
+COPY --from=build /app/newrelic/newrelic.jar newrelic/newrelic.jar
+COPY newrelic/newrelic.yml newrelic/newrelic.yml
+
 EXPOSE 8080
 
-# Always run with the production Spring profile
+# JAVA_TOOL_OPTIONS is read automatically by the JVM before main() runs.
+# Set it in .env to tune JVM memory and optionally activate the NR agent.
 ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
