@@ -116,9 +116,10 @@ public class ReceiptController {
     @PutMapping("/{id}/vehicle")
     public ResponseEntity<?> linkVehicle(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         Long vehicleId = body.get("vehicleId") != null ? ((Number) body.get("vehicleId")).longValue() : null;
-        log.info("PUT /api/receipts/{}/vehicle - vehicleId={}", id, vehicleId);
+        String vehicleCategory = body.get("vehicleCategory") instanceof String s ? s : null;
+        log.info("PUT /api/receipts/{}/vehicle - vehicleId={} category={}", id, vehicleId, vehicleCategory);
         try {
-            return ResponseEntity.ok(receiptService.linkToVehicle(id, vehicleId));
+            return ResponseEntity.ok(receiptService.linkToVehicle(id, vehicleId, vehicleCategory));
         } catch (Exception e) {
             log.error("!!! PUT /api/receipts/{}/vehicle FAILED - error={}", id, e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

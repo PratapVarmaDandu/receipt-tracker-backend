@@ -36,6 +36,7 @@ public class ReceiptDTO {
     private String groupName;
     private Long vehicleId;
     private String vehicleName;
+    private String vehicleCategory;
 
     public Long getGroupId() { return groupId; }
     public void setGroupId(Long groupId) { this.groupId = groupId; }
@@ -45,4 +46,6 @@ public class ReceiptDTO {
     public void setVehicleId(Long vehicleId) { this.vehicleId = vehicleId; }
     public String getVehicleName() { return vehicleName; }
     public void setVehicleName(String vehicleName) { this.vehicleName = vehicleName; }
+    public String getVehicleCategory() { return vehicleCategory; }
+    public void setVehicleCategory(String vehicleCategory) { this.vehicleCategory = vehicleCategory; }
 }

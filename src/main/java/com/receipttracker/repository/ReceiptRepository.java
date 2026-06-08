@@ -1,8 +1,10 @@
 package com.receipttracker.repository;
 
+import com.receipttracker.model.ExpenseGroup;
 import com.receipttracker.model.Receipt;
 import com.receipttracker.model.StoreType;
 import com.receipttracker.model.User;
+import com.receipttracker.model.Vehicle;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,4 +36,8 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long> {
 
     @Query("SELECT DISTINCT r.cardBank FROM Receipt r WHERE r.cardBank IS NOT NULL")
     List<String> findDistinctCardBanks();
+
+    List<Receipt> findByGroup(ExpenseGroup group);
+
+    List<Receipt> findByVehicle(Vehicle vehicle);
 }

@@ -68,6 +68,10 @@ public class ExpenseShare {
 
     private String splitType;
 
+    /** True when the receipt owner owes the invitee (invitee paid the bill). */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean paidForOwner = false;
+
     @PrePersist
     void prePersist() {
         createdAt = LocalDateTime.now();

@@ -31,7 +31,8 @@ com.receipttracker
 - Monetary fields: always `BigDecimal`, never `double`/`float`
 - `Receipt.items` uses `CascadeType.ALL` + `orphanRemoval=true` — on update, clear the list and re-add
 - `paymentCard` format: `{CARDBANK}_{CARDTYPE}_{LASTFOUR}` (e.g. `CHASE_VISA_1234`)
-- `Receipt.vehicle` — nullable `@ManyToOne Vehicle`; set via `PUT /api/receipts/{id}/vehicle`; `ReceiptDTO` exposes `vehicleId` + `vehicleName` (computed: `"{year} {make} {model}"`)
+- `Receipt.vehicle` — nullable `@ManyToOne Vehicle`; set via `PUT /api/receipts/{id}/vehicle`; body: `{ vehicleId: Long|null, vehicleCategory: String|null }`; `ReceiptDTO` exposes `vehicleId`, `vehicleName` (computed: `"{year} {make} {model}"`), and `vehicleCategory`
+- `Receipt.vehicleCategory` — nullable String; values: `FUEL`, `MAINTENANCE`, `REPAIR`, `INSURANCE`, `REGISTRATION`, `PARKING`, `WASH`, `OTHER`; stored uppercase; cleared to null when vehicle is unlinked
 - AWS credentials in `User` are AES-256-GCM encrypted — always go through `EncryptionService`
 - `@PrePersist` sets `createdAt`/`uploadedAt` — don't set manually
 
@@ -72,8 +73,9 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 - Entity: `ExpenseShare` → table `expense_shares`; status enum: `ShareStatus`
   (`PENDING`, `ACCEPTED`, `DENIED`, `CHANGE_REQUESTED`, `CHANGE_APPROVED`, `CHANGE_REJECTED`)
 - `inviteToken` is a UUID generated in `@PrePersist`; never logged verbatim
-- `splitType` field on `ExpenseShare`: `EQUAL`, `CUSTOM`, or `ITEM_BASED`
+- `splitType` field on `ExpenseShare`: `EQUAL`, `CUSTOM`, `ITEM_BASED`, or `PAID_FOR_ME`
 - Equal split divides by `invitees.size() + 1` — the +1 accounts for the owner's share
+- **PAID_FOR_ME split**: single invitee is the payer (creditor); `paidForOwner=true` on the share; the owner owes the invitee, not the other way around; share response page shows "Debt Confirmation" to the payer
 - **ITEM_BASED split**: `CreateShareRequest.itemAssignments` maps each invitee email → list of
   `ReceiptItem` ids. All ids must belong to the receipt or a `RuntimeException` is thrown.
   Tax: `effectiveTaxRate = receipt.tax / receipt.subtotal` (0 if subtotal is null/0).
@@ -126,6 +128,7 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
   - `GET /api/nhtsa/models?make={name}&year={year}` — models for a make+year, cached 12h
   - `GET /api/nhtsa/vin/{vin}?year={y}` — decodes VIN (optional year), returns make/model/trim
   - `GET /api/vehicles/{id}/recalls` — delegates to NhtsaApiService, calls NHTSA Recalls API
+  - `GET /api/vehicles/{id}/receipts` — owner or accepted shared user (`requireCanView`); returns light receipt summaries (id, storeName, total, purchaseDateTime, storeType, vehicleCategory) for receipts linked via `PUT /api/receipts/{id}/vehicle`
 - `VehicleReportService` generates a multi-page PDF ("Vehicle for Sale" report) using Apache PDFBox 3.0.3:
   - Page 1: vehicle specs (make/model/year/VIN/color), registration (license plate, tag expiry), insurance, purchase info, summary (total maintenance cost, avg MPG, service count)
   - Page 2: full service history table (date, service type, mileage, cost, provider)
@@ -142,13 +145,25 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 - `inviteToken` UUID on `ExpenseGroup` is the QR/link token for joining; public GET permitted
 - `GET /api/groups/join/:token` — public (no auth); `POST /api/groups/join/:token` — auth required
 - Routes: POST /api/groups, GET /api/groups/mine, GET/POST /api/groups/join/:token,
-  GET /api/groups/:id/members
+  GET /api/groups/:id, GET /api/groups/:id/receipts (members only), DELETE /api/groups/:id (owner only)
+- `DELETE /api/groups/:id`: OWNER only; unassigns all receipts (sets group=null), deletes all members, deletes group
+- `GET /api/groups/:id/receipts`: returns light receipt summaries (id, storeName, total, purchaseDateTime, ownerEmail) for all group members to see
 
 ## Vision AI config
 - Feature-flagged: `vision.ai.enabled=${VISION_AI_ENABLED:false}`
 - Set `ANTHROPIC_API_KEY` + `VISION_AI_ENABLED=true` in `local.env` to enable
 - PDFs are rendered page-by-page to PNG before sending (up to `vision.ai.max-pdf-pages`, default 5)
 - Model: `claude-sonnet-4-6` (override with `VISION_AI_MODEL`)
+
+## Job Application Tracker
+- Entities: `JobApplication` → `job_applications`; `InterviewRound` → `interview_rounds`
+- Enums: `JobApplicationStatus`, `InterviewFormat`, `InterviewOutcome`
+- `JobApplication.resumeDocumentId` nullable Long FK → `Document.id`; title resolved via `documentRepo.findById` in `toDTO()` (no JOIN) → `resumeDocumentTitle`
+- `nextInterviewAt` computed in `toDTO()`: earliest future PENDING `InterviewRound.scheduledAt`
+- `followUpDue` computed in `toDTO()`: `followUpDate <= today` and status not in {REJECTED, WITHDRAWN, GHOSTED, OFFER}
+- `JobApplicationController` routes all under `/api/jobs`; no public endpoints — all require auth
+- `InterviewRound.outcome` default `PENDING` set in both `@PrePersist` and `mapRoundFromRequest` guard
+- `JobApplicationService.getSummary()` iterates all applications in-memory — same pattern as `DocumentService.getSummary()`
 
 ## Analytics
 - `AnalyticsDTO` includes `spendingByCategoryPerMonth: Map<month, Map<category, amount>>` — computed in `AnalyticsService` alongside `spendingByMonth`; used by the MoM comparison chart on the dashboard

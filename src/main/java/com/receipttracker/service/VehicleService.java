@@ -386,6 +386,23 @@ public class VehicleService {
         return nhtsaService.getRecalls(v.getMake(), v.getModel(), v.getModelYear());
     }
 
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getVehicleReceipts(Long vehicleId) {
+        Vehicle v = requireCanView(vehicleId);
+        return receiptRepo.findByVehicle(v).stream()
+                .map(r -> {
+                    Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id", r.getId());
+                    m.put("storeName", r.getStoreName() != null ? r.getStoreName() : "");
+                    m.put("total", r.getTotal() != null ? r.getTotal() : java.math.BigDecimal.ZERO);
+                    m.put("purchaseDateTime", r.getPurchaseDateTime() != null ? r.getPurchaseDateTime().toString() : "");
+                    m.put("storeType", r.getStoreType() != null ? r.getStoreType().name() : "");
+                    m.put("vehicleCategory", r.getVehicleCategory() != null ? r.getVehicleCategory() : "");
+                    return m;
+                })
+                .collect(Collectors.toList());
+    }
+
     // ── Access guards ─────────────────────────────────────────────────────────
 
     /** Owner-only operations: delete vehicle, manage sharing, update metadata. */

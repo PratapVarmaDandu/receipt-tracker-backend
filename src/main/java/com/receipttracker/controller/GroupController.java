@@ -83,4 +83,28 @@ public class GroupController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteGroup(@PathVariable Long id) {
+        log.trace(">>> DELETE /api/groups/{}", id);
+        try {
+            groupService.deleteGroup(id);
+            log.debug("<<< DELETE /api/groups/{} ok", id);
+            return ResponseEntity.ok(Map.of("message", "Group deleted"));
+        } catch (Exception e) {
+            log.error("!!! DELETE /api/groups/{} failed: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/receipts")
+    public ResponseEntity<?> getGroupReceipts(@PathVariable Long id) {
+        log.trace(">>> GET /api/groups/{}/receipts", id);
+        try {
+            return ResponseEntity.ok(groupService.getGroupReceipts(id));
+        } catch (Exception e) {
+            log.error("!!! GET /api/groups/{}/receipts failed: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

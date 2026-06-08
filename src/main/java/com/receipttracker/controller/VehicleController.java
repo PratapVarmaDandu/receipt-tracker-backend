@@ -180,6 +180,19 @@ public class VehicleController {
         }
     }
 
+    // ── Receipts ─────────────────────────────────────────────────────────────
+
+    @GetMapping("/{id}/receipts")
+    public ResponseEntity<?> getLinkedReceipts(@PathVariable Long id) {
+        log.trace(">>> GET /api/vehicles/{}/receipts", id);
+        try {
+            return ResponseEntity.ok(vehicleService.getVehicleReceipts(id));
+        } catch (Exception e) {
+            log.error("!!! GET /api/vehicles/{}/receipts failed: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ── PDF Report ──────────────────────────────────────────────────────────
 
     @GetMapping("/{id}/report")

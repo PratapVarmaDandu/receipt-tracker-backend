@@ -297,8 +297,8 @@ public class ReceiptService {
     }
 
     @Transactional
-    public ReceiptDTO linkToVehicle(Long receiptId, Long vehicleId) {
-        log.info("TRANSACTION: linkToVehicle START - receiptId={} vehicleId={}", receiptId, vehicleId);
+    public ReceiptDTO linkToVehicle(Long receiptId, Long vehicleId, String vehicleCategory) {
+        log.info("TRANSACTION: linkToVehicle START - receiptId={} vehicleId={} category={}", receiptId, vehicleId, vehicleCategory);
         User caller = currentUser();
         Receipt receipt = receiptRepo.findById(receiptId)
                 .orElseThrow(() -> new RuntimeException("Receipt not found: " + receiptId));
@@ -307,6 +307,7 @@ public class ReceiptService {
         }
         if (vehicleId == null) {
             receipt.setVehicle(null);
+            receipt.setVehicleCategory(null);
             log.info("<<< linkToVehicle: removed vehicle link from receiptId={}", receiptId);
         } else {
             Vehicle vehicle = vehicleRepo.findById(vehicleId)
@@ -315,9 +316,36 @@ public class ReceiptService {
                 throw new RuntimeException("You do not own this vehicle");
             }
             receipt.setVehicle(vehicle);
-            log.info("<<< linkToVehicle: linked receiptId={} to vehicleId={}", receiptId, vehicleId);
+            receipt.setVehicleCategory(vehicleCategory != null && !vehicleCategory.isBlank() ? vehicleCategory.toUpperCase() : null);
+            log.info("<<< linkToVehicle: linked receiptId={} to vehicleId={} category={}", receiptId, vehicleId, vehicleCategory);
         }
         return toDTO(receiptRepo.save(receipt));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReceiptDTO> getByGroup(Long groupId) {
+        User caller = currentUser();
+        ExpenseGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found: " + groupId));
+        if (!memberRepo.existsByGroupAndUser(group, caller)) {
+            throw new RuntimeException("You are not a member of this group");
+        }
+        return receiptRepo.findByGroup(group).stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReceiptDTO> getByVehicle(Long vehicleId) {
+        User caller = currentUser();
+        Vehicle vehicle = vehicleRepo.findById(vehicleId)
+                .orElseThrow(() -> new RuntimeException("Vehicle not found: " + vehicleId));
+        if (!vehicle.getUser().getId().equals(caller.getId())) {
+            throw new RuntimeException("You do not own this vehicle");
+        }
+        return receiptRepo.findByVehicle(vehicle).stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -380,6 +408,7 @@ public class ReceiptService {
         if (r.getVehicle() != null) {
             dto.setVehicleId(r.getVehicle().getId());
             dto.setVehicleName(r.getVehicle().getModelYear() + " " + r.getVehicle().getMake() + " " + r.getVehicle().getModel());
+            dto.setVehicleCategory(r.getVehicleCategory());
         }
 
         if (r.getItems() != null) {

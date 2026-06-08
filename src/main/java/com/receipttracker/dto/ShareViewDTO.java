@@ -20,6 +20,7 @@ public class ShareViewDTO {
     private String splitType;
     private List<ReceiptItemDTO> items;
     private boolean inviteeLinkNeeded;
+    private boolean paidForOwner;
     // populated for ITEM_BASED shares only
     private List<ExpenseShareItemDTO> assignedItems;
     private BigDecimal itemSubtotal;
@@ -51,6 +52,8 @@ public class ShareViewDTO {
     public void setItems(List<ReceiptItemDTO> items) { this.items = items; }
     public boolean isInviteeLinkNeeded() { return inviteeLinkNeeded; }
     public void setInviteeLinkNeeded(boolean inviteeLinkNeeded) { this.inviteeLinkNeeded = inviteeLinkNeeded; }
+    public boolean isPaidForOwner() { return paidForOwner; }
+    public void setPaidForOwner(boolean paidForOwner) { this.paidForOwner = paidForOwner; }
     public String getSplitType() { return splitType; }
     public void setSplitType(String splitType) { this.splitType = splitType; }
     public List<ExpenseShareItemDTO> getAssignedItems() { return assignedItems; }

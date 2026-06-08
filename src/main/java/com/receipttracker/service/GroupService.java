@@ -6,9 +6,11 @@ import com.receipttracker.dto.GroupMemberDTO;
 import com.receipttracker.model.ExpenseGroup;
 import com.receipttracker.model.GroupMember;
 import com.receipttracker.model.GroupMember.GroupRole;
+import com.receipttracker.model.Receipt;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.ExpenseGroupRepository;
 import com.receipttracker.repository.GroupMemberRepository;
+import com.receipttracker.repository.ReceiptRepository;
 import com.receipttracker.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +33,7 @@ public class GroupService {
     @Autowired private ExpenseGroupRepository groupRepo;
     @Autowired private GroupMemberRepository memberRepo;
     @Autowired private UserRepository userRepo;
+    @Autowired private ReceiptRepository receiptRepo;
 
     private User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -104,6 +108,47 @@ public class GroupService {
             throw new RuntimeException("You are not a member of this group");
         }
         return toDTOWithMembers(group, caller);
+    }
+
+    @Transactional
+    public void deleteGroup(Long id) {
+        User caller = currentUser();
+        ExpenseGroup group = groupRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
+        GroupMember callerMember = memberRepo.findByGroupAndUser(group, caller)
+                .orElseThrow(() -> new RuntimeException("You are not a member of this group"));
+        if (callerMember.getRole() != GroupRole.OWNER) {
+            throw new RuntimeException("Only the group owner can delete this group");
+        }
+
+        // Unassign all receipts from this group
+        List<Receipt> receipts = receiptRepo.findByGroup(group);
+        receipts.forEach(r -> r.setGroup(null));
+        receiptRepo.saveAll(receipts);
+
+        // Remove all members then the group
+        memberRepo.deleteAll(memberRepo.findByGroup(group));
+        groupRepo.delete(group);
+        log.info("Deleted group id={} by owner={}", id, caller.getEmail());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getGroupReceipts(Long groupId) {
+        User caller = currentUser();
+        ExpenseGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
+        if (!memberRepo.existsByGroupAndUser(group, caller)) {
+            throw new RuntimeException("You are not a member of this group");
+        }
+        return receiptRepo.findByGroup(group).stream()
+                .map(r -> Map.<String, Object>of(
+                        "id", r.getId(),
+                        "storeName", r.getStoreName() != null ? r.getStoreName() : "",
+                        "total", r.getTotal() != null ? r.getTotal() : java.math.BigDecimal.ZERO,
+                        "purchaseDateTime", r.getPurchaseDateTime() != null ? r.getPurchaseDateTime().toString() : "",
+                        "ownerEmail", r.getUser() != null ? r.getUser().getEmail() : ""
+                ))
+                .collect(Collectors.toList());
     }
 
     private GroupDTO toDTO(ExpenseGroup group, User currentUser) {

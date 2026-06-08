@@ -74,6 +74,10 @@ public class ExpenseShareService {
             return createItemBasedShares(receipt, inviter, req);
         }
 
+        if ("PAID_FOR_ME".equalsIgnoreCase(splitType)) {
+            return createPaidForMeShare(receipt, inviter, req);
+        }
+
         // ── EQUAL / CUSTOM path (unchanged logic) ────────────────────────────
         List<ShareInviteItem> invitees = req.getInvitees();
         if (invitees == null || invitees.isEmpty()) {
@@ -229,6 +233,47 @@ public class ExpenseShareService {
         return created.stream().map(this::toDTO).collect(Collectors.toList());
     }
 
+    private List<ExpenseShareDTO> createPaidForMeShare(Receipt receipt, User inviter, CreateShareRequest req) {
+        List<ShareInviteItem> invitees = req.getInvitees();
+        if (invitees == null || invitees.size() != 1) {
+            throw new RuntimeException("PAID_FOR_ME split requires exactly one payer email");
+        }
+        ShareInviteItem payerItem = invitees.get(0);
+        if (payerItem.getEmail() == null || !payerItem.getEmail().contains("@")) {
+            throw new RuntimeException("Invalid payer email address");
+        }
+        if (payerItem.getAmount() == null || payerItem.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("Amount owed must be greater than zero");
+        }
+
+        String payerEmail = payerItem.getEmail().trim().toLowerCase();
+
+        boolean alreadyExists = shareRepo.findByReceiptId(receipt.getId()).stream()
+                .anyMatch(s -> s.getInviteeEmail().equalsIgnoreCase(payerEmail)
+                        && (s.getStatus() == ShareStatus.PENDING
+                            || s.getStatus() == ShareStatus.CHANGE_REQUESTED
+                            || s.getStatus() == ShareStatus.CHANGE_APPROVED));
+        if (alreadyExists) {
+            throw new RuntimeException("An active record already exists for: " + payerEmail);
+        }
+
+        ExpenseShare share = new ExpenseShare();
+        share.setReceipt(receipt);
+        share.setInviter(inviter);
+        share.setInviteeEmail(payerEmail);
+        share.setShareAmount(payerItem.getAmount());
+        share.setSplitType("PAID_FOR_ME");
+        share.setPaidForOwner(true);
+        share.setStatus(ShareStatus.PENDING);
+        ExpenseShare saved = shareRepo.save(share);
+
+        String tokenUrl = frontendUrl + "/share/" + saved.getInviteToken();
+        emailService.sendInvite(payerEmail, receipt.getStoreName(), inviter.getName(), payerItem.getAmount(), tokenUrl);
+
+        log.info("<<< createPaidForMeShare for receiptId={} payer={}", receipt.getId(), payerEmail);
+        return List.of(toDTO(saved));
+    }
+
     @Transactional(readOnly = true)
     public List<ExpenseShareDTO> getSharesForReceipt(Long receiptId) {
         log.trace(">>> getSharesForReceipt receiptId={}", receiptId);
@@ -266,6 +311,7 @@ public class ExpenseShareService {
         dto.setChangeResponseNote(share.getChangeResponseNote());
         dto.setInviteeLinkNeeded(share.getInvitee() == null);
         dto.setSplitType(share.getSplitType());
+        dto.setPaidForOwner(share.isPaidForOwner());
 
         // All receipt items (for context display)
         List<ReceiptItemDTO> allItems = receipt.getItems().stream().map(item -> {
@@ -425,6 +471,7 @@ public class ExpenseShareService {
         dto.setStatus(share.getStatus());
         dto.setInviteToken(share.getInviteToken());
         dto.setSplitType(share.getSplitType());
+        dto.setPaidForOwner(share.isPaidForOwner());
         dto.setCreatedAt(share.getCreatedAt());
         dto.setUpdatedAt(share.getUpdatedAt());
 

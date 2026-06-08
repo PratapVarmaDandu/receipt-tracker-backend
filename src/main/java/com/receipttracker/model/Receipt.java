@@ -61,6 +61,9 @@ public class Receipt {
     @JoinColumn(name = "vehicle_id")
     private Vehicle vehicle;
 
+    /** Vehicle expense category: FUEL, MAINTENANCE, REPAIR, INSURANCE, REGISTRATION, PARKING, WASH, OTHER */
+    private String vehicleCategory;
+
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<ReceiptItem> items = new ArrayList<>();
 

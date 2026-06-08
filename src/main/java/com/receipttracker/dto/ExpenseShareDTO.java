@@ -20,6 +20,7 @@ public class ExpenseShareDTO {
     private ShareStatus status;
     private String inviteToken;
     private String splitType;
+    private boolean paidForOwner;
     private List<ExpenseShareItemDTO> items;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -52,6 +53,8 @@ public class ExpenseShareDTO {
     public void setInviteToken(String inviteToken) { this.inviteToken = inviteToken; }
     public String getSplitType() { return splitType; }
     public void setSplitType(String splitType) { this.splitType = splitType; }
+    public boolean isPaidForOwner() { return paidForOwner; }
+    public void setPaidForOwner(boolean paidForOwner) { this.paidForOwner = paidForOwner; }
     public List<ExpenseShareItemDTO> getItems() { return items; }
     public void setItems(List<ExpenseShareItemDTO> items) { this.items = items; }
     public LocalDateTime getCreatedAt() { return createdAt; }
