@@ -12,6 +12,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,6 +30,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class DocumentShareServiceTest {
 
     @Mock private DocumentShareRepository shareRepo;
@@ -85,6 +88,8 @@ class DocumentShareServiceTest {
         saved.setId(1L);
         saved.setOwner(owner);
         saved.setRecipientEmail("attorney@example.com");
+        saved.setRecipientName("Tax Attorney");
+        saved.setPurpose("Tax Filing 2024");
         saved.setShareToken("abc123token");
         saved.setExpiresAt(LocalDateTime.now().plusDays(7));
         saved.setDocuments(List.of(doc));

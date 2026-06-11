@@ -149,6 +149,34 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 - `DELETE /api/groups/:id`: OWNER only; unassigns all receipts (sets group=null), deletes all members, deletes group
 - `GET /api/groups/:id/receipts`: returns light receipt summaries (id, storeName, total, purchaseDateTime, ownerEmail) for all group members to see
 
+## Organization / Admin Portal
+- Entities: `Organization` → `organizations`; `OrgMembership` → `org_memberships`
+- `Organization`: id, name, slug (unique), plan (FREE/PRO), status (ACTIVE/SUSPENDED), owner FK → users; annotated `@DynamicUpdate` so Hibernate only includes changed columns in UPDATE — prevents Square credential columns from being overwritten when name/slug changes
+- `OrgMembership`: id, org FK, user FK (nullable until accepted), inviteEmail, role (OWNER/ADMIN/STAFF/VIEWER), status (PENDING/ACTIVE/REVOKED), inviteToken UUID, invitedAt, joinedAt
+- `OrgMembership` unique on `(org_id, invite_email)`; `user_id` null until invitee accepts
+- `OrganizationService.create()` saves org + OWNER membership row in one transaction
+- `OrganizationService.delete()` requires OWNER; deletes in order: OrgOrders → OrgMemberships → Organization; receipts are intentionally left intact (they belong to users)
+- `OrganizationService.update()` uses `saveAndFlush()` + DB reload to ensure the returned DTO reflects actual DB state, especially Square fields
+- Role hierarchy enforced via `requireAtLeast(org, minimum)` → `roleLevel()` int comparison (OWNER=4, ADMIN=3, STAFF=2, VIEWER=1)
+- `User.platformAdmin` boolean — `Boolean.TRUE.equals(user.getPlatformAdmin())` used everywhere (null-safe for existing rows)
+- `GET /api/org/join/{token}` is `permitAll()` for GET only — same pattern as vehicle/group joins; POST requires auth
+- `EmailService.sendOrgInvite()` — follows same non-fatal SMTP pattern as all other email methods
+- **Re-invite fix**: `invite()` calls `findByOrgAndInviteEmail` first; if a REVOKED row exists it is reused (reset token, status→PENDING, user/joinedAt cleared) rather than inserting a new row that would violate the unique constraint on `(org_id, invite_email)`
+
+## Phase 2 — Per-org Square
+- `Organization` has `squareAccessTokenEnc` (AES-256-GCM encrypted, 1024 chars), `squareApplicationId`, `squareLocationId`, `squareEnvironment` (SANDBOX/PRODUCTION); `isSquareConfigured()` checks token non-null
+- `SquareApiService.SquareCreds` inner record: `accessToken`, `environment`, `applicationId`, `locationId`; `baseUrl()` returns sandbox/prod URL; all API methods have `*ForCreds(SquareCreds, ...)` variants; `envCreds()` falls back to global env vars for the original shop
+- `OrgSquareController` (`/api/organizations/{slug}/square`): GET (VIEWER+), PUT (ADMIN+), DELETE (OWNER), POST `/test` (VIEWER+); raw token never returned — `OrgSquareConfigDTO` has `configured: boolean`
+- `OrgOrder` entity → `org_orders`: org FK, placedBy FK, squareOrderId, squarePaymentId, totalAmount, locationId, storeName, receiptId (plain Long, no JPA relation), status (COMPLETED/REFUNDED/CANCELLED), placedAt
+- `OrgOrderController` (`/api/organizations/{slug}/...`): `GET catalog`, `GET locations`, `POST payments` (saves both personal Receipt + OrgOrder), `GET orders` — all STAFF+
+- `OrganizationDTO` now includes `squareConfigured`, `squareEnvironment`, `recentOrderCount` (last 50 orders)
+
+## Phase 3 — Platform Admin
+- `PlatformController` at `/api/platform`: `GET /orgs`, `GET /stats`, `PUT /orgs/{slug}/status`, `PUT /orgs/{slug}/plan` — all require `platformAdmin=true`
+- `PlatformService.requirePlatformAdmin()` uses `getAttribute("sub") → findByGoogleId` pattern; throws if `!Boolean.TRUE.equals(user.getPlatformAdmin())`
+- `PlatformStatsDTO`: totalOrgs, activeOrgs, suspendedOrgs, freeOrgs, proOrgs, totalMembers, squareConfiguredOrgs
+- To make a user a platform admin: `UPDATE users SET platform_admin = true WHERE email = '...'` (no UI — DB-only)
+
 ## Vision AI config
 - Feature-flagged: `vision.ai.enabled=${VISION_AI_ENABLED:false}`
 - Set `ANTHROPIC_API_KEY` + `VISION_AI_ENABLED=true` in `local.env` to enable
@@ -201,11 +229,30 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 | `GMAIL_USERNAME` | `""` | Gmail address for expense-share emails |
 | `GMAIL_APP_PASSWORD` | `""` | Gmail App Password (not account password) |
 
+## Tests
+All tests live under `src/test/java/com/receipttracker/`.
+
+| Class | Layer | Count | Coverage focus |
+|---|---|---|---|
+| `OrganizationServiceTest` | Service | 30 | create, listMine, getBySlug, invite (role gates), acceptInvite (email-match, idempotency), revoke, getInviteByToken, listMembers |
+| `OrganizationControllerTest` | Controller | 17 | HTTP 200/400 for all org CRUD routes |
+| `OrgJoinControllerTest` | Controller | 8 | public GET + auth POST for join token |
+| `DocumentServiceTest` | Service | 11 | upload validation, toDTO status, next steps, archive |
+| `DocumentShareServiceTest` | Service | 8 | create share, token lookup, expiry, download |
+| `ExpenseShareServiceTest` | Service | 12 | equal/custom/item-based splits, paid-for-me |
+| `ReceiptGroupServiceTest` | Service | 8 | group add/remove, membership gates |
+
+**Java 25 setup** (required for Mockito to work):
+- `src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker` → `mock-maker-subclass`
+  (inline mock maker can't instrument `java.lang.Object` on Java 25)
+- All test classes annotated `@MockitoSettings(strictness = Strictness.LENIENT)` because
+  `@BeforeEach` security-context helpers stub fields not consumed by every negative test
+
 ## Commands
 ```
 mvn spring-boot:run -Dspring.profiles.active=local   # dev (H2, no auth)
 mvn clean package                                     # build fat JAR
-mvn test                                              # run tests
+mvn test                                              # run tests (94 total)
 ```
 
 ## Don't

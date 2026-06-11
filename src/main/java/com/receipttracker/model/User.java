@@ -61,6 +61,10 @@ public class User {
     @Column(name = "welcome_dismissed")
     private boolean welcomeDismissed = false;
 
+    /** Platform-level super admin — can view/manage all organizations. */
+    @Column(name = "platform_admin")
+    private Boolean platformAdmin = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

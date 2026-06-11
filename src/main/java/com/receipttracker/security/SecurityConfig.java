@@ -72,6 +72,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/groups/join/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/documents/shared/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vehicles/access/join/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/org/join/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             );

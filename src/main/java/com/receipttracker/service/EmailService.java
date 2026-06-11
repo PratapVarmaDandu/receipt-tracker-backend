@@ -113,6 +113,25 @@ public class EmailService {
         send(to, subject, body);
     }
 
+    public void sendOrgInvite(String to, String ownerName, String orgName, String role, String inviteUrl) {
+        String subject = escapeHtml(ownerName) + " invited you to join " + escapeHtml(orgName);
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:#4f46e5;padding:24px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.3rem'>You're invited to join an organization</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p><strong>" + escapeHtml(ownerName) + "</strong> has invited you to join "
+            + "<strong>" + escapeHtml(orgName) + "</strong> as <strong>" + escapeHtml(role) + "</strong>.</p>"
+            + "<p style='text-align:center;margin:28px 0'>"
+            + "<a href='" + inviteUrl + "' style='background:#4f46e5;color:#fff;padding:12px 28px;"
+            + "border-radius:8px;text-decoration:none;font-weight:600;display:inline-block'>"
+            + "Accept Invite</a></p>"
+            + "<p style='color:#94a3b8;font-size:12px'>If you did not expect this email, you can ignore it.</p>"
+            + "</div></div>";
+        send(to, subject, body);
+    }
+
     public void sendVehicleShareInvite(String to, String ownerName, String vehicleName, String inviteUrl) {
         String subject = escapeHtml(ownerName) + " shared their vehicle with you: " + escapeHtml(vehicleName);
         String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"

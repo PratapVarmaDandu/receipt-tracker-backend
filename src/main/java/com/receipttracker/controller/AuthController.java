@@ -51,7 +51,8 @@ public class AuthController {
                         "email",             user.getEmail()   != null ? user.getEmail()   : "",
                         "picture",           user.getPicture() != null ? user.getPicture() : "",
                         "welcomeDismissed",  user.isWelcomeDismissed(),
-                        "storageConfigured", user.isStorageConfigured()
+                        "storageConfigured", user.isStorageConfigured(),
+                        "platformAdmin",     Boolean.TRUE.equals(user.getPlatformAdmin())
                     ));
                 })
                 .orElse(ResponseEntity.ok(Map.of("authenticated", false)));
