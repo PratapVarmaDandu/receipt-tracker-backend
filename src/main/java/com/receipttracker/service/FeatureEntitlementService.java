@@ -44,7 +44,19 @@ public class FeatureEntitlementService {
     public Set<AppFeature> getMyFeatures() {
         if (!gatingEnabled) return EnumSet.allOf(AppFeature.class);
         User user = currentUser();
-        Set<AppFeature> features = EnumSet.noneOf(AppFeature.class);
+
+        // Platform admins have unrestricted access to everything
+        if (Boolean.TRUE.equals(user.getPlatformAdmin())) return EnumSet.allOf(AppFeature.class);
+
+        // Personal features are included for every logged-in user — no org required
+        Set<AppFeature> features = EnumSet.of(
+                AppFeature.GARAGE,
+                AppFeature.DOCUMENT_VAULT,
+                AppFeature.JOB_TRACKER,
+                AppFeature.EXPENSE_SHARING
+        );
+
+        // Org-scoped features (e.g. SHOP_POS) still require an active org grant
         for (OrgMembership m : memberRepo.findByUserAndStatus(user, MemberStatus.ACTIVE)) {
             featureRepo.findByOrg(m.getOrg()).stream()
                     .filter(OrgFeature::isActive)
