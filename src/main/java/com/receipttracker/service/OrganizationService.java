@@ -297,6 +297,59 @@ public class OrganizationService {
         log.info("Clover config cleared: org={}", slug);
     }
 
+    // ── Public store toggle ────────────────────────────────────────────────────
+
+    @Transactional
+    public OrganizationDTO setPublicStore(String slug, boolean enabled) {
+        User caller = currentUser();
+        Organization org = requireOrg(slug);
+        boolean isPlatformAdmin = Boolean.TRUE.equals(caller.getPlatformAdmin());
+        OrgMembership myMembership = memberRepo.findByOrgAndUser(org, caller).orElse(null);
+        boolean isOwner = myMembership != null
+                && myMembership.getStatus() == MemberStatus.ACTIVE
+                && myMembership.getRole() == OrgRole.OWNER;
+        if (!isOwner && !isPlatformAdmin)
+            throw new RuntimeException("Only the org owner or a platform admin can change public store visibility");
+        org.setPublicStore(enabled);
+        orgRepo.save(org);
+        log.info("Public store {} for org={} by {}", enabled ? "enabled" : "disabled", slug, caller.getEmail());
+        OrgRole role = myMembership != null ? myMembership.getRole() : (isPlatformAdmin ? OrgRole.VIEWER : null);
+        return toDTO(org, role);
+    }
+
+    /** Resolves decrypted Square credentials for a public store — no membership check. */
+    public SquareApiService.SquareCreds resolvePublicSquareCreds(String slug) {
+        Organization org = requireOrg(slug);
+        if (!org.isPublicStore())
+            throw new RuntimeException("This store is not publicly accessible");
+        entitlement.requireOrgFeature(org, AppFeature.SHOP_POS);
+        if (!org.isSquareConfigured())
+            throw new RuntimeException("Square is not configured for this organization");
+        String token = encryptionService.decrypt(org.getSquareAccessTokenEnc());
+        return new SquareApiService.SquareCreds(
+                token,
+                org.getSquareEnvironment() != null ? org.getSquareEnvironment().name().toLowerCase() : "sandbox",
+                org.getSquareApplicationId(),
+                org.getSquareLocationId()
+        );
+    }
+
+    /** Resolves decrypted Clover credentials for a public store — no membership check. */
+    public CloverApiService.CloverCreds resolvePublicCloverCreds(String slug) {
+        Organization org = requireOrg(slug);
+        if (!org.isPublicStore())
+            throw new RuntimeException("This store is not publicly accessible");
+        entitlement.requireOrgFeature(org, AppFeature.SHOP_POS);
+        if (!org.isCloverConfigured())
+            throw new RuntimeException("Clover is not configured for this organization");
+        String token = encryptionService.decrypt(org.getCloverAccessTokenEnc());
+        return new CloverApiService.CloverCreds(
+                token,
+                org.getCloverEnvironment() != null ? org.getCloverEnvironment().name() : "SANDBOX",
+                org.getCloverMerchantId()
+        );
+    }
+
     /** Resolves decrypted Clover credentials for API calls. Throws if not configured
      *  or the org lacks the SHOP_POS feature. */
     public CloverApiService.CloverCreds resolveCloverCreds(String slug) {
@@ -435,6 +488,7 @@ public class OrganizationService {
         dto.setCloverConfigured(org.isCloverConfigured());
         dto.setCloverEnvironment(org.getCloverEnvironment() != null ? org.getCloverEnvironment().name() : null);
         dto.setRecentOrderCount(orgOrderRepo.findByOrgOrderByPlacedAtDesc(org, PageRequest.of(0, 50)).size());
+        dto.setPublicStore(org.isPublicStore());
         return dto;
     }
 

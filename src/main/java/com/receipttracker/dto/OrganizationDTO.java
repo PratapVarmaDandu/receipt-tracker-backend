@@ -23,6 +23,7 @@ public class OrganizationDTO {
     private boolean cloverConfigured;
     private String cloverEnvironment;
     private int recentOrderCount;
+    private boolean publicStore;
     /** Active feature grants — populated only in the platform admin listing. */
     private List<String> features;
 }

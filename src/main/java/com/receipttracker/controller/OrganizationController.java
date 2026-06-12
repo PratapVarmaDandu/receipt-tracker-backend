@@ -86,4 +86,15 @@ public class OrganizationController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @PutMapping("/{slug}/public-store")
+    public ResponseEntity<?> setPublicStore(@PathVariable String slug,
+                                            @RequestBody Map<String, Boolean> body) {
+        try {
+            boolean enabled = Boolean.TRUE.equals(body.get("enabled"));
+            return ResponseEntity.ok(orgService.setPublicStore(slug, enabled));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

@@ -11,4 +11,5 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     Optional<Organization> findBySlug(String slug);
     List<Organization> findByOwner(User owner);
     boolean existsBySlug(String slug);
+    List<Organization> findAllByPublicStoreTrue();
 }

@@ -72,6 +72,9 @@ public class Organization {
     @Column(name = "clover_environment")
     private CloverEnv cloverEnvironment = CloverEnv.SANDBOX;
 
+    @Column(name = "public_store", columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private boolean publicStore = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
