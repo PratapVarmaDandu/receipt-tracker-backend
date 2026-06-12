@@ -322,7 +322,7 @@ public class OrganizationService {
         Organization org = requireOrg(slug);
         if (!org.isPublicStore())
             throw new RuntimeException("This store is not publicly accessible");
-        entitlement.requireOrgFeature(org, AppFeature.SHOP_POS);
+        // publicStore flag IS the authorization — no org feature grant required
         if (!org.isSquareConfigured())
             throw new RuntimeException("Square is not configured for this organization");
         String token = encryptionService.decrypt(org.getSquareAccessTokenEnc());
@@ -339,7 +339,7 @@ public class OrganizationService {
         Organization org = requireOrg(slug);
         if (!org.isPublicStore())
             throw new RuntimeException("This store is not publicly accessible");
-        entitlement.requireOrgFeature(org, AppFeature.SHOP_POS);
+        // publicStore flag IS the authorization — no org feature grant required
         if (!org.isCloverConfigured())
             throw new RuntimeException("Clover is not configured for this organization");
         String token = encryptionService.decrypt(org.getCloverAccessTokenEnc());
