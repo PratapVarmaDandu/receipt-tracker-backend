@@ -3,6 +3,7 @@ package com.receipttracker.dto;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class OrganizationDTO {
@@ -22,4 +23,6 @@ public class OrganizationDTO {
     private boolean cloverConfigured;
     private String cloverEnvironment;
     private int recentOrderCount;
+    /** Active feature grants — populated only in the platform admin listing. */
+    private List<String> features;
 }

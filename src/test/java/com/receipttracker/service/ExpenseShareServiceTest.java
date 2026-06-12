@@ -45,6 +45,7 @@ class ExpenseShareServiceTest {
     @Mock private ReceiptItemRepository receiptItemRepo;
     @Mock private UserRepository userRepo;
     @Mock private EmailService emailService;
+    @Mock private FeatureEntitlementService entitlement;
 
     @InjectMocks
     private ExpenseShareService service;

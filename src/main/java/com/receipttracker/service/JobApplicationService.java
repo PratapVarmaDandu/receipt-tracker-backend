@@ -32,6 +32,7 @@ public class JobApplicationService {
     @Autowired private InterviewRoundRepository interviewRoundRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private DocumentRepository documentRepo;
+    @Autowired private FeatureEntitlementService entitlement;
 
     // ── User resolution ─────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ public class JobApplicationService {
     @Transactional
     public JobApplicationDTO create(CreateJobApplicationRequest req) {
         log.info(">>> create company={} title={}", req.getCompanyName(), req.getJobTitle());
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User user = currentUser();
 
         JobApplication app = new JobApplication();
@@ -63,6 +65,7 @@ public class JobApplicationService {
 
     @Transactional(readOnly = true)
     public List<JobApplicationDTO> list(String statusStr) {
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User user = currentUser();
         List<JobApplication> apps;
         if (statusStr != null && !statusStr.isBlank()) {
@@ -76,6 +79,7 @@ public class JobApplicationService {
 
     @Transactional(readOnly = true)
     public JobApplicationDTO getById(Long id) {
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User caller = currentUser();
         JobApplication app = jobAppRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Job application not found: " + id));
@@ -86,6 +90,7 @@ public class JobApplicationService {
     @Transactional
     public JobApplicationDTO update(Long id, CreateJobApplicationRequest req) {
         log.info(">>> update id={}", id);
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User caller = currentUser();
         JobApplication app = jobAppRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Job application not found: " + id));
@@ -99,6 +104,7 @@ public class JobApplicationService {
     @Transactional
     public void delete(Long id) {
         log.info(">>> delete id={}", id);
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User caller = currentUser();
         JobApplication app = jobAppRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Job application not found: " + id));
@@ -111,6 +117,7 @@ public class JobApplicationService {
 
     @Transactional
     public InterviewRoundDTO addInterviewRound(Long jobAppId, CreateInterviewRoundRequest req) {
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User caller = currentUser();
         JobApplication app = requireOwned(jobAppId, caller);
 
@@ -122,6 +129,7 @@ public class JobApplicationService {
 
     @Transactional
     public InterviewRoundDTO updateInterviewRound(Long jobAppId, Long roundId, CreateInterviewRoundRequest req) {
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User caller = currentUser();
         requireOwned(jobAppId, caller);
         InterviewRound round = interviewRoundRepo.findById(roundId)
@@ -134,6 +142,7 @@ public class JobApplicationService {
 
     @Transactional
     public void deleteInterviewRound(Long jobAppId, Long roundId) {
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User caller = currentUser();
         requireOwned(jobAppId, caller);
         InterviewRound round = interviewRoundRepo.findById(roundId)
@@ -147,6 +156,7 @@ public class JobApplicationService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getSummary() {
+        entitlement.requireFeature(AppFeature.JOB_TRACKER);
         User user = currentUser();
         List<JobApplication> all = jobAppRepo.findByUserOrderByAppliedDateDesc(user);
         LocalDate today = LocalDate.now();

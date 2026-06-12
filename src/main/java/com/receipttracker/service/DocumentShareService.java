@@ -33,6 +33,7 @@ public class DocumentShareService {
     @Autowired private UserRepository userRepo;
     @Autowired private DocumentService documentService;
     @Autowired private EmailService emailService;
+    @Autowired private FeatureEntitlementService entitlement;
 
     @Value("${app.frontend.url:http://localhost:4200}")
     private String frontendUrl;
@@ -50,6 +51,7 @@ public class DocumentShareService {
     @Transactional
     public DocumentShareDTO createShare(CreateDocumentShareRequest req) {
         log.info(">>> createShare recipient={} docs={}", req.getRecipientEmail(), req.getDocumentIds());
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
 
         User owner = currentUser();
 
@@ -140,6 +142,7 @@ public class DocumentShareService {
 
     @Transactional(readOnly = true)
     public List<DocumentShareDTO> myShares() {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User owner = currentUser();
         return shareRepo.findByOwnerOrderBySharedAtDesc(owner).stream()
                 .map(this::toDTO).collect(Collectors.toList());

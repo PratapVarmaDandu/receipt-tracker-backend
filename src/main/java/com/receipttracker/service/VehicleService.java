@@ -55,6 +55,7 @@ public class VehicleService {
     @Autowired private NhtsaApiService nhtsaService;
     @Autowired private VehicleReportService reportService;
     @Autowired private EmailService emailService;
+    @Autowired private FeatureEntitlementService entitlement;
 
     // ── User resolution ───────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ public class VehicleService {
 
     @Transactional
     public VehicleDTO create(VehicleDTO dto) {
+        entitlement.requireFeature(AppFeature.GARAGE);
         User user = currentUser();
         Vehicle v = fromDTO(dto);
         v.setUser(user);
@@ -87,6 +89,7 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public List<VehicleDTO> listMine() {
+        entitlement.requireFeature(AppFeature.GARAGE);
         User user = currentUser();
         List<VehicleDTO> result = new ArrayList<>();
 
@@ -405,8 +408,10 @@ public class VehicleService {
 
     // ── Access guards ─────────────────────────────────────────────────────────
 
-    /** Owner-only operations: delete vehicle, manage sharing, update metadata. */
+    /** Owner-only operations: delete vehicle, manage sharing, update metadata.
+     *  Also enforces the GARAGE feature entitlement for every caller. */
     private Vehicle requireOwned(Long id) {
+        entitlement.requireFeature(AppFeature.GARAGE);
         User caller = currentUser();
         Vehicle v = vehicleRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Vehicle not found: " + id));
@@ -414,8 +419,10 @@ public class VehicleService {
         return v;
     }
 
-    /** Owner or any accepted shared user — for view and add/edit operations. */
+    /** Owner or any accepted shared user — for view and add/edit operations.
+     *  Also enforces the GARAGE feature entitlement for every caller. */
     private Vehicle requireCanView(Long id) {
+        entitlement.requireFeature(AppFeature.GARAGE);
         User caller = currentUser();
         Vehicle v = vehicleRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Vehicle not found: " + id));

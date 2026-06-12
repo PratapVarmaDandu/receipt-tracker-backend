@@ -38,6 +38,7 @@ class DocumentShareServiceTest {
     @Mock private UserRepository userRepo;
     @Mock private DocumentService documentService;
     @Mock private EmailService emailService;
+    @Mock private FeatureEntitlementService entitlement;
 
     @InjectMocks private DocumentShareService service;
 

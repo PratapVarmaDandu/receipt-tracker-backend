@@ -35,6 +35,7 @@ public class OrganizationService {
     @Autowired private EncryptionService encryptionService;
     @Autowired private OrgOrderRepository orgOrderRepo;
     @Autowired private CloverApiService cloverApiService;
+    @Autowired private FeatureEntitlementService entitlement;
 
     @Value("${app.frontend.url:http://localhost:4200}")
     private String frontendUrl;
@@ -296,10 +297,12 @@ public class OrganizationService {
         log.info("Clover config cleared: org={}", slug);
     }
 
-    /** Resolves decrypted Clover credentials for API calls. Throws if not configured. */
+    /** Resolves decrypted Clover credentials for API calls. Throws if not configured
+     *  or the org lacks the SHOP_POS feature. */
     public CloverApiService.CloverCreds resolveCloverCreds(String slug) {
         Organization org = requireOrg(slug);
         requireAtLeast(org, OrgRole.STAFF);
+        entitlement.requireOrgFeature(org, AppFeature.SHOP_POS);
         if (!org.isCloverConfigured())
             throw new RuntimeException("Clover is not configured for this organization");
         String token = encryptionService.decrypt(org.getCloverAccessTokenEnc());
@@ -324,10 +327,12 @@ public class OrganizationService {
         return Organization.CloverEnv.SANDBOX;
     }
 
-    /** Resolves decrypted Square credentials for API calls. Throws if not configured. */
+    /** Resolves decrypted Square credentials for API calls. Throws if not configured
+     *  or the org lacks the SHOP_POS feature. */
     public SquareApiService.SquareCreds resolveSquareCreds(String slug) {
         Organization org = requireOrg(slug);
         requireAtLeast(org, OrgRole.STAFF);
+        entitlement.requireOrgFeature(org, AppFeature.SHOP_POS);
         if (!org.isSquareConfigured())
             throw new RuntimeException("Square is not configured for this organization");
         String token = encryptionService.decrypt(org.getSquareAccessTokenEnc());

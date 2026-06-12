@@ -2,11 +2,14 @@ package com.receipttracker.service;
 
 import com.receipttracker.dto.OrganizationDTO;
 import com.receipttracker.dto.PlatformStatsDTO;
+import com.receipttracker.model.AppFeature;
+import com.receipttracker.model.OrgFeature;
 import com.receipttracker.model.OrgMembership.MemberStatus;
 import com.receipttracker.model.Organization;
 import com.receipttracker.model.Organization.OrgPlan;
 import com.receipttracker.model.Organization.OrgStatus;
 import com.receipttracker.model.User;
+import com.receipttracker.repository.OrgFeatureRepository;
 import com.receipttracker.repository.OrgMembershipRepository;
 import com.receipttracker.repository.OrgOrderRepository;
 import com.receipttracker.repository.OrganizationRepository;
@@ -20,7 +23,10 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +37,7 @@ public class PlatformService {
     @Autowired private OrganizationRepository orgRepo;
     @Autowired private OrgMembershipRepository memberRepo;
     @Autowired private OrgOrderRepository orgOrderRepo;
+    @Autowired private OrgFeatureRepository featureRepo;
     @Autowired private UserRepository userRepo;
 
     @Transactional(readOnly = true)
@@ -56,6 +63,7 @@ public class PlatformService {
                     dto.setMemberCount((int) activeMembers);
                     dto.setRecentOrderCount((int) orgOrderRepo.findByOrgOrderByPlacedAtDesc(org).stream()
                             .limit(50).count());
+                    dto.setFeatures(activeFeatureNames(org));
                     return dto;
                 })
                 .collect(Collectors.toList());
@@ -92,7 +100,64 @@ public class PlatformService {
         long pro       = all.stream().filter(o -> o.getPlan() == OrgPlan.PRO).count();
         long sqConfigured = all.stream().filter(Organization::isSquareConfigured).count();
         long totalMembers = memberRepo.count();
-        return new PlatformStatsDTO(total, active, suspended, free, pro, totalMembers, sqConfigured);
+        Map<String, Long> adoption = new LinkedHashMap<>();
+        for (AppFeature f : AppFeature.values()) {
+            adoption.put(f.name(), featureRepo.countByFeature(f));
+        }
+        return new PlatformStatsDTO(total, active, suspended, free, pro, totalMembers, sqConfigured, adoption);
+    }
+
+    // ── Feature entitlements ───────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<String> listOrgFeatures(String slug) {
+        requirePlatformAdmin();
+        return activeFeatureNames(requireOrg(slug));
+    }
+
+    @Transactional
+    public List<String> grantFeature(String slug, String featureName, LocalDateTime expiresAt) {
+        requirePlatformAdmin();
+        Organization org = requireOrg(slug);
+        AppFeature feature = parseFeature(featureName);
+        OrgFeature row = featureRepo.findByOrgAndFeature(org, feature)
+                .orElseGet(() -> {
+                    OrgFeature f = new OrgFeature();
+                    f.setOrg(org);
+                    f.setFeature(feature);
+                    return f;
+                });
+        row.setExpiresAt(expiresAt);
+        featureRepo.save(row);
+        log.info("Platform: org {} granted feature {} (expires {})", slug, feature, expiresAt);
+        return activeFeatureNames(org);
+    }
+
+    @Transactional
+    public List<String> revokeFeature(String slug, String featureName) {
+        requirePlatformAdmin();
+        Organization org = requireOrg(slug);
+        AppFeature feature = parseFeature(featureName);
+        featureRepo.deleteByOrgAndFeature(org, feature);
+        log.info("Platform: org {} feature {} revoked", slug, feature);
+        return activeFeatureNames(org);
+    }
+
+    private AppFeature parseFeature(String name) {
+        if (name == null || name.isBlank()) throw new RuntimeException("feature is required");
+        try {
+            return AppFeature.valueOf(name.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Unknown feature: " + name);
+        }
+    }
+
+    private List<String> activeFeatureNames(Organization org) {
+        return featureRepo.findByOrg(org).stream()
+                .filter(OrgFeature::isActive)
+                .map(f -> f.getFeature().name())
+                .sorted()
+                .collect(Collectors.toList());
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

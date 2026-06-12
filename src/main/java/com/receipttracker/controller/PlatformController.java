@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -47,6 +48,39 @@ public class PlatformController {
             if (status == null || status.isBlank())
                 return ResponseEntity.badRequest().body(Map.of("error", "status is required (ACTIVE or SUSPENDED)"));
             return ResponseEntity.ok(platformService.setOrgStatus(slug, status));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/orgs/{slug}/features")
+    public ResponseEntity<?> listFeatures(@PathVariable String slug) {
+        try {
+            return ResponseEntity.ok(platformService.listOrgFeatures(slug));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/orgs/{slug}/features")
+    public ResponseEntity<?> grantFeature(@PathVariable String slug,
+                                          @RequestBody Map<String, String> body) {
+        try {
+            String feature = body.get("feature");
+            String expires = body.get("expiresAt");
+            LocalDateTime expiresAt = (expires == null || expires.isBlank())
+                    ? null : LocalDateTime.parse(expires);
+            return ResponseEntity.ok(platformService.grantFeature(slug, feature, expiresAt));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/orgs/{slug}/features/{feature}")
+    public ResponseEntity<?> revokeFeature(@PathVariable String slug,
+                                           @PathVariable String feature) {
+        try {
+            return ResponseEntity.ok(platformService.revokeFeature(slug, feature));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

@@ -43,6 +43,7 @@ class DocumentServiceTest {
     @Mock private DocumentNextStepRepository nextStepRepo;
     @Mock private UserRepository userRepo;
     @Mock private StoragePathResolver storagePathResolver;
+    @Mock private FeatureEntitlementService entitlement;
 
     @InjectMocks private DocumentService service;
 

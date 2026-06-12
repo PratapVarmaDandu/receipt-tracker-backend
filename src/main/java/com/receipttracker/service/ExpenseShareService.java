@@ -36,6 +36,7 @@ public class ExpenseShareService {
     @Autowired private ReceiptItemRepository receiptItemRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private EmailService emailService;
+    @Autowired private FeatureEntitlementService entitlement;
 
     @Value("${app.frontend.url:http://localhost:4200}")
     private String frontendUrl;
@@ -55,6 +56,7 @@ public class ExpenseShareService {
     @Transactional
     public List<ExpenseShareDTO> createShares(Long receiptId, CreateShareRequest req) {
         log.info(">>> createShares receiptId={} splitType={}", receiptId, req.getSplitType());
+        entitlement.requireFeature(AppFeature.EXPENSE_SHARING);
 
         User inviter = currentUser();
         Receipt receipt = receiptRepo.findById(receiptId)
@@ -277,6 +279,7 @@ public class ExpenseShareService {
     @Transactional(readOnly = true)
     public List<ExpenseShareDTO> getSharesForReceipt(Long receiptId) {
         log.trace(">>> getSharesForReceipt receiptId={}", receiptId);
+        entitlement.requireFeature(AppFeature.EXPENSE_SHARING);
         User caller = currentUser();
         Receipt receipt = receiptRepo.findById(receiptId)
                 .orElseThrow(() -> new RuntimeException("Receipt not found: " + receiptId));
@@ -406,6 +409,7 @@ public class ExpenseShareService {
     @Transactional
     public ExpenseShareDTO processOwnerAction(Long shareId, OwnerActionRequest req) {
         log.info(">>> processOwnerAction shareId={} action={}", shareId, req.getAction());
+        entitlement.requireFeature(AppFeature.EXPENSE_SHARING);
         User caller = currentUser();
 
         ExpenseShare share = shareRepo.findById(shareId)

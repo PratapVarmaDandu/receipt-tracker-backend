@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface OrgMembershipRepository extends JpaRepository<OrgMembership, Long> {
     List<OrgMembership> findByOrgOrderByInvitedAtDesc(Organization org);
     List<OrgMembership> findByUserAndStatusNot(User user, MemberStatus status);
+    List<OrgMembership> findByUserAndStatus(User user, MemberStatus status);
     Optional<OrgMembership> findByInviteToken(String token);
     boolean existsByOrgAndInviteEmailAndStatusNot(Organization org, String email, MemberStatus status);
     Optional<OrgMembership> findByOrgAndInviteEmail(Organization org, String inviteEmail);

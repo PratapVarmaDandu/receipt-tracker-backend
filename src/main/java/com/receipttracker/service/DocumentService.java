@@ -55,6 +55,7 @@ public class DocumentService {
     @Autowired private DocumentNextStepRepository nextStepRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private StoragePathResolver storagePathResolver;
+    @Autowired private FeatureEntitlementService entitlement;
 
     // ── User resolution ─────────────────────────────────────────────────────
 
@@ -86,6 +87,7 @@ public class DocumentService {
                               String notes) throws IOException {
 
         log.info(">>> upload title={} category={}", title, categoryStr);
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User user = currentUser();
 
         // ── Security: validate file type ─────────────────────────────────
@@ -133,6 +135,7 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public Resource download(Long documentId) throws IOException {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         Document doc = documentRepo.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
@@ -160,6 +163,7 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public List<DocumentDTO> list(String categoryStr, int page, int size) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User user = currentUser();
         if (categoryStr != null && !categoryStr.isBlank()) {
             DocumentCategory cat = DocumentCategory.valueOf(categoryStr.toUpperCase());
@@ -174,6 +178,7 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public DocumentDTO getById(Long id) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         Document doc = documentRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + id));
@@ -185,6 +190,7 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public List<DocumentDTO> getExpiringSoon(int days) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User user = currentUser();
         LocalDate today = LocalDate.now();
         return documentRepo.findExpiringBetween(user, today, today.plusDays(days))
@@ -194,6 +200,7 @@ public class DocumentService {
     /** Dashboard summary: counts by category + expiring-soon count. */
     @Transactional(readOnly = true)
     public Map<String, Object> getSummary() {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User user = currentUser();
         List<Document> all = documentRepo.findAllActiveByUser(user);
         LocalDate today = LocalDate.now();
@@ -231,6 +238,7 @@ public class DocumentService {
     @Transactional
     public DocumentDTO update(Long id, String title, String subcategory,
                                Integer documentYear, String expiryDateStr, String notes) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         Document doc = documentRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + id));
@@ -247,6 +255,7 @@ public class DocumentService {
 
     @Transactional
     public DocumentDTO archive(Long id) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         Document doc = documentRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + id));
@@ -257,6 +266,7 @@ public class DocumentService {
 
     @Transactional
     public void delete(Long id) throws IOException {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         Document doc = documentRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + id));
@@ -278,6 +288,7 @@ public class DocumentService {
     @Transactional
     public DocumentNextStepDTO addNextStep(Long documentId, String title,
                                            String description, String dueDateStr) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         Document doc = documentRepo.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Document not found: " + documentId));
@@ -295,6 +306,7 @@ public class DocumentService {
 
     @Transactional
     public DocumentNextStepDTO completeNextStep(Long stepId) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         DocumentNextStep step = nextStepRepo.findById(stepId)
                 .orElseThrow(() -> new RuntimeException("Step not found: " + stepId));
@@ -308,6 +320,7 @@ public class DocumentService {
 
     @Transactional
     public void deleteNextStep(Long stepId) {
+        entitlement.requireFeature(AppFeature.DOCUMENT_VAULT);
         User caller = currentUser();
         DocumentNextStep step = nextStepRepo.findById(stepId)
                 .orElseThrow(() -> new RuntimeException("Step not found: " + stepId));
