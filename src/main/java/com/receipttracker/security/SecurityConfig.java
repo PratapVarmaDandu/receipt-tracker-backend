@@ -74,6 +74,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/vehicles/access/join/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/org/join/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/shop/public/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/webhooks/square/subscriptions").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             );

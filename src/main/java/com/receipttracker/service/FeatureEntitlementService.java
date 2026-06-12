@@ -6,8 +6,10 @@ import com.receipttracker.model.OrgMembership;
 import com.receipttracker.model.OrgMembership.MemberStatus;
 import com.receipttracker.model.Organization;
 import com.receipttracker.model.User;
+import com.receipttracker.model.UserFeatureGrant;
 import com.receipttracker.repository.OrgFeatureRepository;
 import com.receipttracker.repository.OrgMembershipRepository;
+import com.receipttracker.repository.UserFeatureRepository;
 import com.receipttracker.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +37,7 @@ public class FeatureEntitlementService {
 
     @Autowired private OrgFeatureRepository featureRepo;
     @Autowired private OrgMembershipRepository memberRepo;
+    @Autowired private UserFeatureRepository userFeatureRepo;
     @Autowired private UserRepository userRepo;
 
     @Value("${features.gating.enabled:true}")
@@ -48,13 +51,11 @@ public class FeatureEntitlementService {
         // Platform admins have unrestricted access to everything
         if (Boolean.TRUE.equals(user.getPlatformAdmin())) return EnumSet.allOf(AppFeature.class);
 
-        // Personal features are included for every logged-in user — no org required
-        Set<AppFeature> features = EnumSet.of(
-                AppFeature.GARAGE,
-                AppFeature.DOCUMENT_VAULT,
-                AppFeature.JOB_TRACKER,
-                AppFeature.EXPENSE_SHARING
-        );
+        // Personal features require a user-level grant (purchased via /plans or granted by platform admin)
+        Set<AppFeature> features = EnumSet.noneOf(AppFeature.class);
+        userFeatureRepo.findByUser(user).stream()
+                .filter(UserFeatureGrant::isActive)
+                .forEach(g -> features.add(g.getFeature()));
 
         // Org-scoped features (e.g. SHOP_POS) still require an active org grant
         for (OrgMembership m : memberRepo.findByUserAndStatus(user, MemberStatus.ACTIVE)) {

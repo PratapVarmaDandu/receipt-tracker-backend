@@ -162,7 +162,7 @@ public class PlatformService {
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private void requirePlatformAdmin() {
+    public void requirePlatformAdmin() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) throw new RuntimeException("Not authenticated");
         OAuth2User oAuth2User = (OAuth2User) auth.getPrincipal();
