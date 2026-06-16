@@ -168,6 +168,12 @@ public class ExpenseShareService {
                 .map(s -> s.getInviteeEmail().toLowerCase())
                 .collect(Collectors.toSet());
 
+        // Count how many invitees are assigned each item (for shared-item price splitting)
+        Map<Long, Long> itemAssigneeCount = assignments.stream()
+                .filter(a -> a.getItemIds() != null)
+                .flatMap(a -> a.getItemIds().stream())
+                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
+
         List<ExpenseShare> created = new ArrayList<>();
 
         for (ItemAssignment assignment : assignments) {
@@ -194,16 +200,20 @@ public class ExpenseShareService {
                     throw new RuntimeException("Item " + itemId + " does not belong to receipt " + receipt.getId());
                 }
                 BigDecimal price = ri.getTotalPrice() != null ? ri.getTotalPrice() : BigDecimal.ZERO;
+                long assignees = itemAssigneeCount.getOrDefault(itemId, 1L);
+                BigDecimal splitPrice = assignees > 1
+                        ? price.divide(BigDecimal.valueOf(assignees), 2, RoundingMode.HALF_UP)
+                        : price;
                 BigDecimal taxForItem = ri.isTaxable()
-                        ? price.multiply(effectiveTaxRate).setScale(2, RoundingMode.HALF_UP)
+                        ? splitPrice.multiply(effectiveTaxRate).setScale(2, RoundingMode.HALF_UP)
                         : BigDecimal.ZERO;
 
-                itemSubtotal = itemSubtotal.add(price);
+                itemSubtotal = itemSubtotal.add(splitPrice);
                 itemTax = itemTax.add(taxForItem);
 
                 ExpenseShareItem si = new ExpenseShareItem();
                 si.setReceiptItem(ri);
-                si.setItemTotal(price);
+                si.setItemTotal(splitPrice);
                 si.setTaxAmount(taxForItem);
                 si.setTaxRate(effectiveTaxRate);
                 shareItems.add(si);
