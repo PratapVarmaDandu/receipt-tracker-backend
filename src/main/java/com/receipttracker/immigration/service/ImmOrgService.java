@@ -1,0 +1,183 @@
+package com.receipttracker.immigration.service;
+
+import com.receipttracker.immigration.dto.CreateImmOrgRequest;
+import com.receipttracker.immigration.dto.ImmOrgDTO;
+import com.receipttracker.immigration.dto.ImmOrgMemberDTO;
+import com.receipttracker.immigration.dto.InviteMemberRequest;
+import com.receipttracker.immigration.model.*;
+import com.receipttracker.immigration.repository.ImmOrgMemberRepository;
+import com.receipttracker.immigration.repository.ImmOrgRepository;
+import com.receipttracker.model.User;
+import com.receipttracker.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class ImmOrgService {
+
+    private static final Logger log = LoggerFactory.getLogger(ImmOrgService.class);
+
+    @Autowired private ImmOrgRepository immOrgRepo;
+    @Autowired private ImmOrgMemberRepository immOrgMemberRepo;
+    @Autowired private UserRepository userRepo;
+
+    private User currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        OAuth2User principal = (OAuth2User) auth.getPrincipal();
+        String googleId = principal.getAttribute("sub");
+        return userRepo.findByGoogleId(googleId)
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+    }
+
+    @Transactional
+    public ImmOrgDTO create(CreateImmOrgRequest req) {
+        log.info(">>> create() name={} orgType={}", req.name(), req.orgType());
+        User user = currentUser();
+
+        ImmOrgType orgType;
+        try {
+            orgType = ImmOrgType.valueOf(req.orgType());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Unknown orgType: " + req.orgType());
+        }
+
+        ImmOrg org = new ImmOrg();
+        org.setName(req.name());
+        org.setOrgType(orgType);
+        org.setOwnerUserId(user.getId());
+        ImmOrg saved = immOrgRepo.save(org);
+
+        ImmOrgMember ownerMember = new ImmOrgMember();
+        ownerMember.setImmOrgId(saved.getId());
+        ownerMember.setUserId(user.getId());
+        ownerMember.setEmail(user.getEmail());
+        ownerMember.setRole(ImmOrgMemberRole.OWNER);
+        ownerMember.setStatus(ImmOrgMemberStatus.ACTIVE);
+        immOrgMemberRepo.save(ownerMember);
+
+        log.info("<<< create() orgId={}", saved.getId());
+        return toDTO(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ImmOrgDTO> listMine() {
+        User user = currentUser();
+        List<ImmOrg> orgs = new ArrayList<>(immOrgRepo.findByMemberUserId(user.getId()));
+        return orgs.stream().map(this::toDTO).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ImmOrgDTO getById(Long id) {
+        User user = currentUser();
+        requireActiveMember(user, id);
+        return immOrgRepo.findById(id)
+                .map(this::toDTO)
+                .orElseThrow(() -> new RuntimeException("Org not found: " + id));
+    }
+
+    @Transactional
+    public ImmOrgMemberDTO inviteMember(Long orgId, InviteMemberRequest req) {
+        User caller = currentUser();
+        requireOwner(caller, orgId);
+
+        // Idempotent: if already a member, return existing
+        var existing = immOrgMemberRepo.findByEmailAndImmOrgId(req.email(), orgId);
+        if (existing.isPresent() && existing.get().getStatus() != ImmOrgMemberStatus.REMOVED) {
+            return toMemberDTO(existing.get());
+        }
+
+        String token = UUID.randomUUID().toString();
+        ImmOrgMember member = new ImmOrgMember();
+        member.setImmOrgId(orgId);
+        member.setEmail(req.email());
+        member.setRole(ImmOrgMemberRole.MEMBER);
+        member.setStatus(ImmOrgMemberStatus.PENDING);
+        member.setInviteToken(token);
+        ImmOrgMember saved = immOrgMemberRepo.save(member);
+
+        log.warn("IMM_ORG_INVITE orgId={} email={} token={}", orgId, req.email(), token);
+        return toMemberDTO(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ImmOrgMemberDTO> listMembers(Long orgId) {
+        User caller = currentUser();
+        requireActiveMember(caller, orgId);
+        return immOrgMemberRepo.findByImmOrgId(orgId).stream().map(this::toMemberDTO).toList();
+    }
+
+    @Transactional
+    public void removeMember(Long orgId, Long memberId) {
+        User caller = currentUser();
+        requireOwner(caller, orgId);
+        ImmOrgMember member = immOrgMemberRepo.findById(memberId)
+                .orElseThrow(() -> new RuntimeException("Member not found: " + memberId));
+        if (!member.getImmOrgId().equals(orgId)) {
+            throw new RuntimeException("Member does not belong to org " + orgId);
+        }
+        member.setStatus(ImmOrgMemberStatus.REMOVED);
+        immOrgMemberRepo.save(member);
+    }
+
+    @Transactional(readOnly = true)
+    public ImmOrgMemberDTO getJoinInfo(String token) {
+        return immOrgMemberRepo.findByInviteToken(token)
+                .map(this::toMemberDTO)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired invite token"));
+    }
+
+    @Transactional
+    public ImmOrgMemberDTO acceptInvite(String token) {
+        User caller = currentUser();
+        ImmOrgMember member = immOrgMemberRepo.findByInviteToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired invite token"));
+
+        if (!member.getEmail().equalsIgnoreCase(caller.getEmail())) {
+            throw new RuntimeException("This invite is not for your account");
+        }
+        if (member.getStatus() == ImmOrgMemberStatus.ACTIVE) {
+            return toMemberDTO(member);
+        }
+
+        member.setStatus(ImmOrgMemberStatus.ACTIVE);
+        member.setUserId(caller.getId());
+        return toMemberDTO(immOrgMemberRepo.save(member));
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private void requireActiveMember(User user, Long orgId) {
+        boolean ok = immOrgMemberRepo.findByUserIdAndStatus(user.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream().anyMatch(m -> m.getImmOrgId().equals(orgId));
+        if (!ok) throw new RuntimeException("Access denied: not a member of org " + orgId);
+    }
+
+    private void requireOwner(User user, Long orgId) {
+        boolean ok = immOrgMemberRepo.findByImmOrgId(orgId).stream()
+                .anyMatch(m -> m.getUserId() != null
+                        && m.getUserId().equals(user.getId())
+                        && m.getRole() == ImmOrgMemberRole.OWNER
+                        && m.getStatus() == ImmOrgMemberStatus.ACTIVE);
+        if (!ok) throw new RuntimeException("Access denied: must be OWNER of org " + orgId);
+    }
+
+    private ImmOrgDTO toDTO(ImmOrg o) {
+        return new ImmOrgDTO(o.getId(), o.getName(), o.getOrgType().name(),
+                o.getOwnerUserId(), o.getCreatedAt().toString());
+    }
+
+    private ImmOrgMemberDTO toMemberDTO(ImmOrgMember m) {
+        return new ImmOrgMemberDTO(m.getId(), m.getImmOrgId(), m.getUserId(),
+                m.getEmail(), m.getRole().name(), m.getStatus().name(), m.getInviteToken());
+    }
+}

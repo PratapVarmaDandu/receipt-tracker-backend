@@ -1,0 +1,488 @@
+package com.receipttracker.immigration.service;
+
+import com.receipttracker.immigration.dto.CreateCaseRequest;
+import com.receipttracker.immigration.dto.ImmigrationCaseDTO;
+import com.receipttracker.immigration.model.*;
+import com.receipttracker.immigration.repository.*;
+import com.receipttracker.model.User;
+import com.receipttracker.repository.UserRepository;
+import com.receipttracker.service.EmailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
+@Service
+public class CaseService {
+
+    private static final Logger log = LoggerFactory.getLogger(CaseService.class);
+
+    @Autowired private ImmigrationCaseRepository caseRepo;
+    @Autowired private BeneficiaryRepository beneficiaryRepo;
+    @Autowired private GrantRepository grantRepo;
+    @Autowired private ImmOrgRepository immOrgRepo;
+    @Autowired private ImmOrgMemberRepository immOrgMemberRepo;
+    @Autowired private UserRepository userRepo;
+    @Autowired private PermissionService permissionService;
+    @Autowired private AuditService auditService;
+    @Autowired private EmailService emailService;
+
+    private static final AtomicInteger caseCounter = new AtomicInteger(1);
+
+    // ── User resolution ──────────────────────────────────────────────────────
+
+    private User currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        OAuth2User principal = (OAuth2User) auth.getPrincipal();
+        String googleId = principal.getAttribute("sub");
+        return userRepo.findByGoogleId(googleId)
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+    }
+
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    @Transactional
+    public ImmigrationCaseDTO create(CreateCaseRequest req) {
+        log.info(">>> create() caseType={}", req.caseType());
+        User caller = currentUser();
+
+        CaseType caseType;
+        try {
+            caseType = CaseType.valueOf(req.caseType());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Unknown caseType: " + req.caseType());
+        }
+
+        // Determine caller's org memberships
+        List<ImmOrgMember> callerMemberships = immOrgMemberRepo
+                .findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE);
+        boolean isOrgMember = !callerMemberships.isEmpty();
+
+        if (!isOrgMember) {
+            throw new RuntimeException(
+                "Only employer or law firm members can create cases. Beneficiaries are invited by their employer.");
+        }
+
+        // beneficiaryEmail is required for all org-member-created cases
+        if (req.beneficiaryEmail() == null || req.beneficiaryEmail().isBlank()) {
+            throw new RuntimeException("beneficiaryEmail is required");
+        }
+
+        // Validate employer org membership if provided
+        ImmOrg employerOrg = null;
+        if (req.employerImmOrgId() != null) {
+            employerOrg = immOrgRepo.findById(req.employerImmOrgId())
+                    .orElseThrow(() -> new RuntimeException("Employer org not found: " + req.employerImmOrgId()));
+            boolean callerInEmployerOrg = callerMemberships.stream()
+                    .anyMatch(m -> m.getImmOrgId().equals(employerOrg.getId()));
+            if (!callerInEmployerOrg) {
+                // Attorney creating a case can also link an employer if they have partnership
+                // Allow through — attorney can link any org to a case they're creating
+                log.info("Caller is not a member of employer org {} — allowing through", req.employerImmOrgId());
+            }
+        }
+
+        // Validate law firm org if provided
+        ImmOrg lawFirmOrg = null;
+        if (req.lawFirmImmOrgId() != null) {
+            lawFirmOrg = immOrgRepo.findById(req.lawFirmImmOrgId())
+                    .orElseThrow(() -> new RuntimeException("Law firm org not found: " + req.lawFirmImmOrgId()));
+        }
+
+        // Validate H4-EAD: parent H1B case must have i140Approved = true
+        if (caseType == CaseType.H4_EAD && req.parentCaseId() != null) {
+            ImmigrationCase parent = caseRepo.findById(req.parentCaseId())
+                    .orElseThrow(() -> new RuntimeException("Parent case not found: " + req.parentCaseId()));
+            if (!parent.isI140Approved()) {
+                throw new RuntimeException(
+                    "H-4 EAD requires an approved I-140 on the primary H-1B case (case "
+                    + parent.getCaseNumber() + " does not have an approved I-140 yet)");
+            }
+        }
+
+        // Find or create beneficiary user
+        String beneficiaryEmail = req.beneficiaryEmail().toLowerCase().trim();
+        User beneficiaryUser = findOrCreateStubUser(beneficiaryEmail);
+        Beneficiary beneficiary = beneficiaryRepo.findByUser(beneficiaryUser)
+                .orElseGet(() -> {
+                    Beneficiary b = new Beneficiary();
+                    b.setUser(beneficiaryUser);
+                    return beneficiaryRepo.save(b);
+                });
+
+        // Build the case
+        ImmigrationCase c = new ImmigrationCase();
+        c.setCaseNumber(generateCaseNumber());
+        c.setBeneficiary(beneficiary);
+        c.setEmployerImmOrgId(employerOrg != null ? employerOrg.getId() : null);
+        c.setLawFirmImmOrgId(lawFirmOrg != null ? lawFirmOrg.getId() : null);
+        c.setCaseType(caseType);
+        c.setStatus(CaseStatus.PROSPECTIVE);
+        c.setParentCaseId(req.parentCaseId());
+        c.setAssignedAttorneyMemberId(req.assignedAttorneyMemberId());
+        c.setCreatedBy(caller);
+
+        // Mark invite pending if beneficiary is a stub (hasn't logged in yet)
+        boolean isStub = beneficiaryUser.getGoogleId().startsWith("PENDING_");
+        if (isStub) {
+            c.setBeneficiaryInviteToken(UUID.randomUUID().toString());
+            c.setBeneficiaryInviteEmail(beneficiaryEmail);
+        }
+
+        ImmigrationCase saved = caseRepo.save(c);
+
+        // Grant beneficiary all scopes
+        grantAllScopes(saved, beneficiaryUser, CaseRelationship.BENEFICIARY, caller);
+
+        // Grant employer org: read case + docs + messaging
+        if (employerOrg != null) {
+            grantOrgScopes(saved, employerOrg.getId(), CaseRelationship.HR_ADMIN, caller,
+                    GrantScope.READ_CASE, GrantScope.READ_DOCS, GrantScope.MESSAGING);
+        }
+
+        // Grant law firm all scopes
+        if (lawFirmOrg != null) {
+            grantOrgScopes(saved, lawFirmOrg.getId(), CaseRelationship.ATTORNEY, caller,
+                    GrantScope.values());
+        }
+
+        auditService.appendSystem(saved, "CASE_CREATED", "{\"caseType\":\"" + caseType.name() + "\"}");
+
+        // Send email invite if beneficiary is a new stub user
+        if (isStub) {
+            sendBeneficiaryInviteEmail(saved, beneficiaryEmail, caller);
+        }
+
+        log.info("<<< create() caseId={} caseNumber={} beneficiary={}",
+                saved.getId(), saved.getCaseNumber(), beneficiaryEmail);
+        return toDTO(saved, caller);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ImmigrationCaseDTO> listAccessible() {
+        log.info(">>> listAccessible()");
+        User user = currentUser();
+        List<Long> orgIds = permissionService.activeImmOrgIds(user);
+        return caseRepo.findAccessibleByUser(user.getId(), orgIds)
+                .stream().map(c -> toDTO(c, user)).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ImmigrationCaseDTO getById(Long caseId) {
+        log.info(">>> getById() caseId={}", caseId);
+        User user = currentUser();
+        permissionService.requireAccess(user, caseId, GrantScope.READ_CASE);
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        return toDTO(c, user);
+    }
+
+    @Transactional
+    public ImmigrationCaseDTO updateStatus(Long caseId, String newStatusStr) {
+        log.info(">>> updateStatus() caseId={} newStatus={}", caseId, newStatusStr);
+        User user = currentUser();
+        permissionService.requireAccess(user, caseId, GrantScope.WRITE_CASE);
+
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+
+        CaseStatus newStatus;
+        try {
+            newStatus = CaseStatus.valueOf(newStatusStr);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Unknown status: " + newStatusStr);
+        }
+
+        if (!c.getStatus().canTransitionTo(newStatus)) {
+            throw new RuntimeException(
+                "Invalid transition: " + c.getStatus() + " → " + newStatus);
+        }
+
+        CaseStatus oldStatus = c.getStatus();
+        c.setStatus(newStatus);
+
+        // Auto-flag I-140 approval on I140 cases reaching PETITION_APPROVED
+        if (newStatus == CaseStatus.PETITION_APPROVED
+                && (c.getCaseType() == CaseType.I140_EB2 || c.getCaseType() == CaseType.I140_EB3)) {
+            c.setI140Approved(true);
+            c.setI140ApprovedDate(LocalDate.now());
+            log.info("I-140 approved for case {} — i140Approved flag set", caseId);
+        }
+
+        ImmigrationCase saved = caseRepo.save(c);
+        auditService.append(saved, user, "STATUS_CHANGED",
+                "{\"from\":\"" + oldStatus.name() + "\",\"to\":\"" + newStatus.name() + "\"}",
+                FeedVisibility.ALL);
+        return toDTO(saved, user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ImmigrationCaseDTO> listByOrg(Long orgId) {
+        log.info(">>> listByOrg() orgId={}", orgId);
+        User user = currentUser();
+        requireOrgMember(user, orgId);
+
+        List<ImmigrationCase> cases = new ArrayList<>();
+        cases.addAll(caseRepo.findByEmployerImmOrgIdOrderByCreatedAtDesc(orgId));
+        cases.addAll(caseRepo.findByLawFirmImmOrgIdOrderByCreatedAtDesc(orgId));
+
+        return cases.stream()
+                .distinct()
+                .map(c -> toDTO(c, user))
+                .toList();
+    }
+
+    // ── Case join (beneficiary invite) ───────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public ImmigrationCaseDTO getByInviteToken(String token) {
+        log.info(">>> getByInviteToken()");
+        ImmigrationCase c = caseRepo.findByBeneficiaryInviteToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid invite link"));
+        // Return without a caller — public view, minimal info
+        return toDTOPublic(c);
+    }
+
+    @Transactional
+    public ImmigrationCaseDTO acceptInvite(String token) {
+        log.info(">>> acceptInvite()");
+        User caller = currentUser();
+
+        ImmigrationCase c = caseRepo.findByBeneficiaryInviteToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid invite link"));
+
+        if (c.getBeneficiaryInviteEmail() == null
+                || !c.getBeneficiaryInviteEmail().equalsIgnoreCase(caller.getEmail())) {
+            throw new RuntimeException("This invite is not for your account (" + caller.getEmail() + ")");
+        }
+
+        // Link caller as the real beneficiary (stub → real)
+        Beneficiary beneficiary = beneficiaryRepo.findByUser(caller)
+                .orElseGet(() -> {
+                    Beneficiary b = new Beneficiary();
+                    b.setUser(caller);
+                    return beneficiaryRepo.save(b);
+                });
+
+        // Update beneficiary on case if it was a stub
+        User stubUser = c.getBeneficiary().getUser();
+        if (!stubUser.getId().equals(caller.getId())) {
+            // Re-point grants from stub to real user
+            grantRepo.findByImmigrationCaseAndRevokedAtIsNull(c).stream()
+                    .filter(g -> g.getSubjectUser() != null
+                              && g.getSubjectUser().getId().equals(stubUser.getId()))
+                    .forEach(g -> {
+                        g.setSubjectUser(caller);
+                        grantRepo.save(g);
+                    });
+            c.setBeneficiary(beneficiary);
+        }
+
+        // Clear invite fields — invite consumed
+        c.setBeneficiaryInviteToken(null);
+        c.setBeneficiaryInviteEmail(null);
+        ImmigrationCase saved = caseRepo.save(c);
+
+        auditService.append(saved, caller, "BENEFICIARY_JOINED",
+                "{\"email\":\"" + caller.getEmail() + "\"}", FeedVisibility.ALL);
+
+        log.info("<<< acceptInvite() caseId={} callerEmail={}", saved.getId(), caller.getEmail());
+        return toDTO(saved, caller);
+    }
+
+    // ── Grant helpers ────────────────────────────────────────────────────────
+
+    @Transactional
+    public void grantUserAccess(Long caseId, Long targetUserId, String relationship, String scope) {
+        User caller = currentUser();
+        permissionService.requireAccess(caller, caseId, GrantScope.WRITE_CASE);
+
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        User target = userRepo.findById(targetUserId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + targetUserId));
+
+        Grant g = new Grant();
+        g.setImmigrationCase(c);
+        g.setSubjectUser(target);
+        g.setRelationship(CaseRelationship.valueOf(relationship));
+        g.setScope(GrantScope.valueOf(scope));
+        g.setGrantedBy(caller);
+        grantRepo.save(g);
+        log.info("<<< grantUserAccess() userId={} caseId={} scope={}", targetUserId, caseId, scope);
+    }
+
+    // ── Mapping ──────────────────────────────────────────────────────────────
+
+    ImmigrationCaseDTO toDTO(ImmigrationCase c, User caller) {
+        String employerName = orgName(c.getEmployerImmOrgId());
+        String lawFirmName  = orgName(c.getLawFirmImmOrgId());
+        String attorneyName = attorneyName(c.getAssignedAttorneyMemberId());
+
+        return new ImmigrationCaseDTO(
+                c.getId(),
+                c.getCaseNumber(),
+                c.getBeneficiary().getId(),
+                c.getBeneficiary().getUser().getName(),
+                c.getBeneficiary().getUser().getEmail(),
+                c.getEmployerImmOrgId(), employerName,
+                c.getLawFirmImmOrgId(),  lawFirmName,
+                c.getCaseType().name(),
+                c.getStatus().name(),
+                c.getPriorityDate(),
+                c.getReceiptNumber(),
+                c.getParentCaseId(),
+                c.isI140Approved(),
+                c.getI140ApprovedDate(),
+                c.getAssignedAttorneyMemberId(),
+                attorneyName,
+                c.getBeneficiaryInviteToken() != null,  // invite still pending
+                c.getCreatedBy().getId(),
+                c.getCreatedAt(),
+                c.getUpdatedAt(),
+                computeCallerRelationship(c, caller)
+        );
+    }
+
+    // Minimal DTO for public invite view (no auth context)
+    private ImmigrationCaseDTO toDTOPublic(ImmigrationCase c) {
+        return new ImmigrationCaseDTO(
+                c.getId(),
+                c.getCaseNumber(),
+                null, null, null,          // beneficiary info hidden in public view
+                c.getEmployerImmOrgId(), orgName(c.getEmployerImmOrgId()),
+                c.getLawFirmImmOrgId(),  orgName(c.getLawFirmImmOrgId()),
+                c.getCaseType().name(),
+                c.getStatus().name(),
+                null, null,
+                c.getParentCaseId(),
+                c.isI140Approved(), null,
+                null, null,
+                true,    // invite is pending (that's why they're viewing this)
+                null, null, null,
+                null
+        );
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private User findOrCreateStubUser(String email) {
+        return userRepo.findByEmail(email).orElseGet(() -> {
+            User stub = new User();
+            stub.setEmail(email);
+            // Placeholder googleId — replaced when the real user logs in via Google
+            stub.setGoogleId("PENDING_" + UUID.randomUUID());
+            stub.setName(email);  // name filled in when they actually log in
+            User saved = userRepo.save(stub);
+            log.info("Created stub user for invite email={}", email);
+            return saved;
+        });
+    }
+
+    private void sendBeneficiaryInviteEmail(ImmigrationCase c, String toEmail, User invitedBy) {
+        try {
+            String subject = "You have been invited to a visa case";
+            String body = String.format(
+                "Hi,\n\n%s has opened a visa sponsorship case for you.\n\n" +
+                "Case: %s (%s)\n" +
+                "Employer: %s\n" +
+                "Law Firm: %s\n\n" +
+                "To view your case, sign in at your Visa Tracker and follow the invitation link:\n" +
+                "/immigration/cases/join/%s\n\n" +
+                "Once you sign in, your case will be visible in your Visa Tracker dashboard.",
+                invitedBy.getName() != null ? invitedBy.getName() : invitedBy.getEmail(),
+                c.getCaseNumber(), c.getCaseType().name(),
+                orgName(c.getEmployerImmOrgId()) != null ? orgName(c.getEmployerImmOrgId()) : "N/A",
+                orgName(c.getLawFirmImmOrgId()) != null ? orgName(c.getLawFirmImmOrgId()) : "N/A",
+                c.getBeneficiaryInviteToken()
+            );
+            emailService.sendSimpleEmail(toEmail, subject, body);
+        } catch (Exception e) {
+            // Non-fatal — email failure never blocks case creation
+            log.warn("Beneficiary invite email failed for {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    private String orgName(Long orgId) {
+        if (orgId == null) return null;
+        return immOrgRepo.findById(orgId).map(ImmOrg::getName).orElse(null);
+    }
+
+    private String attorneyName(Long memberId) {
+        if (memberId == null) return null;
+        return immOrgMemberRepo.findById(memberId)
+                .flatMap(m -> m.getUserId() != null ? userRepo.findById(m.getUserId()) : java.util.Optional.empty())
+                .map(User::getName)
+                .orElse(null);
+    }
+
+    private String computeCallerRelationship(ImmigrationCase c, User caller) {
+        List<Grant> grants = grantRepo.findByImmigrationCaseAndRevokedAtIsNull(c);
+        List<Long> callerOrgIds = immOrgMemberRepo
+                .findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream().map(ImmOrgMember::getImmOrgId).toList();
+
+        List<CaseRelationship> matches = grants.stream()
+                .filter(g -> (g.getSubjectUser() != null && g.getSubjectUser().getId().equals(caller.getId()))
+                          || (g.getSubjectImmOrgId() != null && callerOrgIds.contains(g.getSubjectImmOrgId())))
+                .map(Grant::getRelationship)
+                .distinct()
+                .toList();
+
+        if (matches.contains(CaseRelationship.ATTORNEY) || matches.contains(CaseRelationship.PARALEGAL)) return "ATTORNEY";
+        if (matches.contains(CaseRelationship.HR_ADMIN)) return "HR_ADMIN";
+        if (matches.contains(CaseRelationship.BENEFICIARY)) return "BENEFICIARY";
+        if (!matches.isEmpty()) return "VIEWER";
+        return null;
+    }
+
+    private void requireOrgMember(User user, Long orgId) {
+        boolean isMember = immOrgMemberRepo
+                .findByUserIdAndStatus(user.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream().anyMatch(m -> m.getImmOrgId().equals(orgId));
+        if (!isMember) {
+            throw new RuntimeException("Access denied: not a member of org " + orgId);
+        }
+    }
+
+    private void grantAllScopes(ImmigrationCase c, User subject, CaseRelationship relationship, User grantedBy) {
+        for (GrantScope scope : GrantScope.values()) {
+            Grant g = new Grant();
+            g.setImmigrationCase(c);
+            g.setSubjectUser(subject);
+            g.setRelationship(relationship);
+            g.setScope(scope);
+            g.setGrantedBy(grantedBy);
+            grantRepo.save(g);
+        }
+    }
+
+    private void grantOrgScopes(ImmigrationCase c, Long orgId, CaseRelationship relationship,
+                                 User grantedBy, GrantScope... scopes) {
+        for (GrantScope scope : scopes) {
+            Grant g = new Grant();
+            g.setImmigrationCase(c);
+            g.setSubjectImmOrgId(orgId);
+            g.setRelationship(relationship);
+            g.setScope(scope);
+            g.setGrantedBy(grantedBy);
+            grantRepo.save(g);
+        }
+    }
+
+    private String generateCaseNumber() {
+        return String.format("IMM-%d-%04d",
+                java.time.Year.now().getValue(),
+                caseCounter.getAndIncrement());
+    }
+}

@@ -229,6 +229,84 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 | `GMAIL_USERNAME` | `""` | Gmail address for expense-share emails |
 | `GMAIL_APP_PASSWORD` | `""` | Gmail App Password (not account password) |
 
+## Immigration module (`com.receipttracker.immigration`)
+
+Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
+
+**Table prefix**: all `imm_` tables. Only `user_id` FK crosses feature boundaries — no references to receipts, vehicles, or documents.
+
+**ReBAC access control** — `PermissionService` is the single gate:
+- `requireAccess(user, caseId, GrantScope)` — call as the FIRST line of every service method that touches case data; no exception, no bypass
+- Checks active (non-revoked) `Grant` for (user directly) OR (any org the user is an active member of)
+- Scopes: `READ_CASE`, `WRITE_CASE`, `READ_FORMS`, `WRITE_FORMS`, `READ_DOCUMENTS`, `WRITE_DOCUMENTS`, `MESSAGING`
+
+**Grant model** — `imm_grants`: exactly one of `subjectUser`/`subjectOrg` non-null (enforced in service); `relationship` enum (BENEFICIARY, ATTORNEY, PARALEGAL, HR_ADMIN, EMPLOYER_REP); `revokedAt` null means active
+
+**`-1L` sentinel** — `activeOrgIds()` returns `List.of(-1L)` when user has no org memberships; prevents empty JPA IN clause in `existsActiveGrant()`
+
+**Audit log** — `ImmAuditEvent` / `AuditService` is append-only: no update/delete methods on `ImmAuditEventRepository`. `AuditService.append()` is non-fatal (catches exceptions). `appendSystem()` sets actor=null.
+
+**Activity feed** — `ActivityFeedService.getFeed()` filters events by `FeedVisibility`: ALL visible to any grantee; ATTORNEY_ONLY to ATTORNEY/PARALEGAL; BENEFICIARY_ONLY to BENEFICIARY.
+
+**Consent** — `ConsentRecord` is permanent log; `ConsentService.revokeConsent()` side-effect: revokes all active `Grant` rows for that relationship; beneficiary-only write path.
+
+**Messaging** — channel isolation in `MessageService.requireChannelAccess()`: SHARED=open (any grantee); ATTORNEY_BENEFICIARY=ATTORNEY/PARALEGAL/BENEFICIARY only; ATTORNEY_EMPLOYER=ATTORNEY/PARALEGAL/HR_ADMIN only.
+
+**JSON TEXT columns** — `@Column(columnDefinition = "TEXT")` + Jackson `ObjectMapper` (not JPA JSON type) for H2+MySQL compatibility.
+
+**Canonical profile — passport list** — `passports_json TEXT` stores an array of passport objects; each item has `{ id, numberEnc (AES-256-GCM), country, issueDate, expiryDate, notes, documentIds[] }`. `CanonicalProfileService` encrypts each `number` → `numberEnc` on write and decrypts on read. Current passport = item with highest `issueDate`. On every save the current passport's fields are also written to legacy single columns (`passport_number_enc`, `passport_country`, etc.) so `FormMappingService` keeps working without change.
+
+**Canonical profile — travel entries** — `travel_entries_json TEXT` stores `[{ id, portOfEntry, i94Number, entryDate, admittedUntil, visaClass, notes, documentIds[] }]`. Most-recent entry (highest `entryDate`) is synced to legacy `port_of_entry` / `i94_number` / `entry_date` columns on save for `FormMappingService`. `currentVisaType` and `currentVisaExpiry` remain as standalone columns (current status, not history).
+
+**Canonical profile — doc vault links** — all list types (passports, travelEntries, education, employment, dependents, priorVisas) include `documentIds: Long[]` stored in their JSON items. These are plain Document IDs; no FK constraint — loose reference only (cross-feature FK rule).
+
+**Auto-migration** — if `passports_json` or `travel_entries_json` is null but legacy single fields have data, `CanonicalProfileService.toDTO()` returns a one-item array synthesised from the legacy columns, so the UI shows existing data immediately without a manual migration step.
+
+**Form mapping** — all USCIS/DOS field keys have `// TODO: verify field against official form instruction`. No field label, validation message, or UI copy recommends any form or gives legal advice (UPL guardrail).
+
+**Case types** (`CaseType` enum) — H1B family: `H1B_INITIAL`, `H1B_EXTENSION`, `H1B_TRANSFER`, `H1B_AMENDMENT`; H-4 dependents: `H4`, `H4_EAD`; green card pathway: `PERM`, `I140_EB2`, `I140_EB3`, `I485`, `GC_EAD`, `GC_RENEWAL`; citizenship: `NATURALIZATION`; other: `CONSULAR`
+
+**`ImmigrationCase` key fields** — `parentCaseId Long` (nullable, H4/H4-EAD links to primary H1B case); `i140Approved boolean` (auto-set to true when an I140_EB2/I140_EB3 case reaches `PETITION_APPROVED`); `i140ApprovedDate LocalDate`; `assignedAttorneyMemberId Long` (which `ImmOrgMember` within the law firm is handling this case); `beneficiaryInviteToken String` (UUID, unique, cleared on acceptance); `beneficiaryInviteEmail String` (cleared on acceptance)
+
+**Org-member case creation** — `CaseService.create()` requires the caller to be an active `ImmOrgMember` (EMPLOYER or LAW_FIRM org); `beneficiaryEmail` is required in `CreateCaseRequest`. If no user exists with that email, a **stub user** is created (`googleId = "PENDING_" + UUID`, `email = beneficiaryEmail`). A `Beneficiary` is created for that user, grants assigned, and an invite email sent with the `beneficiaryInviteToken`.
+
+**Stub user merge** — `CustomOAuth2UserService.loadUser()` falls back to `findByEmail()` after `findByGoogleId()` misses; if the found user has `googleId.startsWith("PENDING_")`, the stub is updated with the real Google ID. This silently links the beneficiary invite to their real Google account on first login.
+
+**H4-EAD validation** — `CaseService.create()` checks that `parentCase.i140Approved == true` before allowing `H4_EAD` case creation; throws if not yet approved.
+
+**Beneficiary invite join** — public `GET /api/immigration/cases/join/{token}` returns minimal case info (no auth); auth-required `POST /api/immigration/cases/join/{token}` validates caller email against `beneficiaryInviteEmail`, re-points grants from stub user to real user, clears invite fields.
+
+**Case number** — auto-generated in `CaseService.create()` as `IMM-{year}-{seqN}`.
+
+**Backend routes:**
+- `POST /api/immigration/cases` — create (201); org-member only; `beneficiaryEmail` required
+- `GET  /api/immigration/cases` — list accessible cases
+- `GET  /api/immigration/cases/{id}` — detail (403 if no grant)
+- `PUT  /api/immigration/cases/{id}/status` — transition status (state machine validates; auto-sets `i140Approved` on I140 cases)
+- `GET  /api/immigration/cases/join/{token}` — public; minimal case info for invite page
+- `POST /api/immigration/cases/join/{token}` — auth required; beneficiary accepts invite; email-match validated
+- `GET  /api/immigration/profile/me` — own canonical profile
+- `PUT  /api/immigration/profile/me` — update own profile
+- `GET  /api/immigration/cases/{id}/forms` — list form instances
+- `GET  /api/immigration/cases/{id}/forms/{formId}` — single form
+- `POST /api/immigration/cases/{id}/forms/generate` — upsert forms from profile (201)
+- `PUT  /api/immigration/cases/{id}/forms/{formId}/status` — update form status
+- `GET  /api/immigration/cases/{id}/timeline` — merged events + appointments
+- `POST /api/immigration/cases/{id}/timeline/events` — add event
+- `DELETE /api/immigration/cases/{id}/timeline/events/{eventId}` — delete (non-system only)
+- `POST /api/immigration/cases/{id}/timeline/appointments` — add appointment
+- `DELETE /api/immigration/cases/{id}/timeline/appointments/{apptId}` — delete
+- `GET  /api/immigration/cases/{id}/key-dates` — key dates for case
+- `POST /api/immigration/cases/{id}/key-dates/sync` — sync from profile
+- `POST /api/immigration/cases/{id}/key-dates` — add manual key date
+- `DELETE /api/immigration/cases/{id}/key-dates/{keyDateId}` — remove
+- `GET  /api/immigration/cases/{id}/feed` — activity feed (role-filtered)
+- `GET  /api/immigration/cases/{id}/consent` — consent log (READ_CASE)
+- `POST /api/immigration/cases/{id}/consent/grant` — grant consent (beneficiary only)
+- `POST /api/immigration/cases/{id}/consent/revoke` — revoke consent + revokes matching Grants (beneficiary only)
+- `GET  /api/immigration/cases/{id}/messages/{channel}` — messages for channel (MESSAGING scope + channel access)
+- `POST /api/immigration/cases/{id}/messages/{channel}` — send message
+
 ## Tests
 All tests live under `src/test/java/com/receipttracker/`.
 

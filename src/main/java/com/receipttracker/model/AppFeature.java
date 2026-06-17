@@ -9,5 +9,6 @@ public enum AppFeature {
     DOCUMENT_VAULT,
     GARAGE,
     JOB_TRACKER,
-    SHOP_POS
+    SHOP_POS,
+    VISA_TRACKER
 }

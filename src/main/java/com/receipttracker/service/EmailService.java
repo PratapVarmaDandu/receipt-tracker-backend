@@ -152,6 +152,13 @@ public class EmailService {
         send(to, subject, body);
     }
 
+    public void sendSimpleEmail(String to, String subject, String plainText) {
+        String html = "<div style='font-family:sans-serif;padding:16px'>"
+            + "<pre style='white-space:pre-wrap;font-family:inherit'>"
+            + escapeHtml(plainText) + "</pre></div>";
+        send(to, subject, html);
+    }
+
     private void send(String to, String subject, String htmlBody) {
         if (mailSender == null) {
             log.warn("EMAIL NOT SENT (no SMTP configured): to={} | subject={} | body={}", to, subject, htmlBody);

@@ -30,15 +30,28 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         String name     = oAuth2User.getAttribute("name");
         String picture  = oAuth2User.getAttribute("picture");
 
-        User user = userRepository.findByGoogleId(googleId).orElse(new User());
+        // Primary lookup: by Google ID (returning users)
+        // Fallback: by email for stub users created when an employer invited a beneficiary
+        //   before they had logged in. Stub users have googleId starting with "PENDING_".
+        User user = userRepository.findByGoogleId(googleId)
+                .or(() -> userRepository.findByEmail(email)
+                        .filter(u -> u.getGoogleId() != null && u.getGoogleId().startsWith("PENDING_")))
+                .orElse(new User());
+
         boolean isNew = user.getId() == null;
+        boolean wasStub = !isNew && user.getGoogleId() != null && user.getGoogleId().startsWith("PENDING_");
+
         user.setGoogleId(googleId);
         user.setEmail(email);
         user.setName(name);
         user.setPicture(picture);
         userRepository.save(user);
 
-        log.info("{} user: {} ({})", isNew ? "Created" : "Returning", name, email);
+        if (wasStub) {
+            log.info("Merged stub user → real Google account: {} ({})", name, email);
+        } else {
+            log.info("{} user: {} ({})", isNew ? "Created" : "Returning", name, email);
+        }
         return oAuth2User;
     }
 }

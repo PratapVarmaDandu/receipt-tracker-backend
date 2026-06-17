@@ -75,6 +75,11 @@ public class Organization {
     @Column(name = "public_store", columnDefinition = "BOOLEAN DEFAULT FALSE")
     private boolean publicStore = false;
 
+    // nullable — existing orgs stay null; EMPLOYER or LAW_FIRM for immigration-module orgs
+    @Enumerated(EnumType.STRING)
+    @Column(name = "org_type")
+    private OrgType orgType;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -92,4 +97,5 @@ public class Organization {
     public enum OrgStatus  { ACTIVE, SUSPENDED }
     public enum SquareEnv  { SANDBOX, PRODUCTION }
     public enum CloverEnv  { SANDBOX, PRODUCTION }
+    public enum OrgType    { EMPLOYER, LAW_FIRM }
 }
