@@ -1,6 +1,6 @@
 package com.receipttracker.immigration.controller;
 
-import com.receipttracker.immigration.dto.CreatePartnershipRequest;
+import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.service.OrgPartnershipService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +52,37 @@ public class OrgPartnershipController {
         try {
             partnershipService.end(id);
             return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
+    @PostMapping("/invite")
+    public ResponseEntity<?> inviteEmployer(@RequestBody PartnershipInviteRequest req) {
+        log.info("POST /api/immigration/partnerships/invite lawFirm={} email={}", req.lawFirmOrgId(), req.employerEmail());
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(partnershipService.inviteEmployer(req));
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
+    // public — no auth enforced in controller; returns only public info
+    @GetMapping("/onboard/{token}")
+    public ResponseEntity<?> getOnboardInfo(@PathVariable String token) {
+        try {
+            return ResponseEntity.ok(partnershipService.getOnboardInfo(token));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/onboard/{token}")
+    public ResponseEntity<?> completeOnboarding(@PathVariable String token,
+                                                 @RequestBody EmployerOnboardRequest req) {
+        log.info("POST /api/immigration/partnerships/onboard/{} orgName={}", token, req.orgName());
+        try {
+            return ResponseEntity.ok(partnershipService.completeOnboarding(token, req));
         } catch (RuntimeException e) {
             return denied(e);
         }

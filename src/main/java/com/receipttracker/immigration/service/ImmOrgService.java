@@ -51,6 +51,18 @@ public class ImmOrgService {
             throw new RuntimeException("Unknown orgType: " + req.orgType());
         }
 
+        // A user cannot belong to both an EMPLOYER org and a LAW_FIRM org
+        List<ImmOrg> existingOrgs = immOrgRepo.findByMemberUserId(user.getId());
+        boolean hasConflict = existingOrgs.stream()
+                .anyMatch(o -> o.getOrgType() != orgType);
+        if (hasConflict) {
+            ImmOrgType existing = existingOrgs.stream()
+                    .map(ImmOrg::getOrgType).findFirst().orElse(null);
+            throw new RuntimeException(
+                "You are already registered as a " + (existing != null ? existing.name().toLowerCase().replace("_", " ") : "different org type") +
+                ". A user cannot be both an employer and an attorney/law firm.");
+        }
+
         ImmOrg org = new ImmOrg();
         org.setName(req.name());
         org.setOrgType(orgType);
@@ -72,8 +84,14 @@ public class ImmOrgService {
     @Transactional(readOnly = true)
     public List<ImmOrgDTO> listMine() {
         User user = currentUser();
+        List<ImmOrgMember> myMemberships = immOrgMemberRepo.findByUserIdAndStatus(user.getId(), ImmOrgMemberStatus.ACTIVE);
         List<ImmOrg> orgs = new ArrayList<>(immOrgRepo.findByMemberUserId(user.getId()));
-        return orgs.stream().map(this::toDTO).toList();
+        return orgs.stream().map(o -> {
+            Long memberId = myMemberships.stream()
+                    .filter(m -> m.getImmOrgId().equals(o.getId()))
+                    .findFirst().map(ImmOrgMember::getId).orElse(null);
+            return toDTO(o, memberId);
+        }).toList();
     }
 
     @Transactional(readOnly = true)
@@ -172,8 +190,12 @@ public class ImmOrgService {
     }
 
     private ImmOrgDTO toDTO(ImmOrg o) {
+        return toDTO(o, null);
+    }
+
+    private ImmOrgDTO toDTO(ImmOrg o, Long myMemberId) {
         return new ImmOrgDTO(o.getId(), o.getName(), o.getOrgType().name(),
-                o.getOwnerUserId(), o.getCreatedAt().toString());
+                o.getOwnerUserId(), o.getCreatedAt().toString(), myMemberId);
     }
 
     private ImmOrgMemberDTO toMemberDTO(ImmOrgMember m) {

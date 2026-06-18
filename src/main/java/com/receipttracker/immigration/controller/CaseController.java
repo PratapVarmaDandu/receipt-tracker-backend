@@ -1,12 +1,17 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.immigration.dto.CanonicalProfileDTO;
 import com.receipttracker.immigration.dto.CreateCaseRequest;
 import com.receipttracker.immigration.dto.ImmigrationCaseDTO;
+import com.receipttracker.immigration.service.CanonicalProfileService;
 import com.receipttracker.immigration.service.CaseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +25,7 @@ public class CaseController {
     private static final Logger log = LoggerFactory.getLogger(CaseController.class);
 
     @Autowired private CaseService caseService;
+    @Autowired private CanonicalProfileService canonicalProfileService;
 
     /** Create a new immigration case. Caller must already be registered as a beneficiary. */
     @PostMapping
@@ -96,6 +102,43 @@ public class CaseController {
             }
             log.error("!!! updateStatus failed: {}", msg);
             return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    /** Returns the beneficiary's canonical profile. Requires READ_CASE grant (attorney / HR admin). */
+    @GetMapping("/{id}/beneficiary/profile")
+    public ResponseEntity<?> getBeneficiaryProfile(@PathVariable Long id) {
+        log.info("GET /api/immigration/cases/{}/beneficiary/profile", id);
+        try {
+            CanonicalProfileDTO dto = canonicalProfileService.getForCase(id);
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    /** Proxy-download a profile document; requires READ_CASE grant. */
+    @GetMapping("/{caseId}/profile/documents/{docId}/download")
+    public ResponseEntity<?> downloadProfileDoc(@PathVariable Long caseId, @PathVariable Long docId) {
+        log.info("GET /api/immigration/cases/{}/profile/documents/{}/download", caseId, docId);
+        try {
+            Resource resource = canonicalProfileService.downloadProfileDocument(caseId, docId);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"document\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

@@ -266,9 +266,17 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 
 **Case types** (`CaseType` enum) — H1B family: `H1B_INITIAL`, `H1B_EXTENSION`, `H1B_TRANSFER`, `H1B_AMENDMENT`; H-4 dependents: `H4`, `H4_EAD`; green card pathway: `PERM`, `I140_EB2`, `I140_EB3`, `I485`, `GC_EAD`, `GC_RENEWAL`; citizenship: `NATURALIZATION`; other: `CONSULAR`
 
+**`ImmOrgDTO`** — includes `myMemberId: Long` (the current caller's `ImmOrgMember.id` within that org, populated only by `listMine()`; null on all other DTO calls). Used by the frontend to auto-assign the attorney to themselves when creating a case.
+
+**`ImmigrationCaseDTO`** — includes `assignedAttorneyEmail: String` (the attorney member's `ImmOrgMember.email`; populated from `ImmOrgMemberRepository` at DTO build time). Populated alongside `assignedAttorneyName`.
+
 **`ImmigrationCase` key fields** — `parentCaseId Long` (nullable, H4/H4-EAD links to primary H1B case); `i140Approved boolean` (auto-set to true when an I140_EB2/I140_EB3 case reaches `PETITION_APPROVED`); `i140ApprovedDate LocalDate`; `assignedAttorneyMemberId Long` (which `ImmOrgMember` within the law firm is handling this case); `beneficiaryInviteToken String` (UUID, unique, cleared on acceptance); `beneficiaryInviteEmail String` (cleared on acceptance)
 
 **Org-member case creation** — `CaseService.create()` requires the caller to be an active `ImmOrgMember` (EMPLOYER or LAW_FIRM org); `beneficiaryEmail` is required in `CreateCaseRequest`. If no user exists with that email, a **stub user** is created (`googleId = "PENDING_" + UUID`, `email = beneficiaryEmail`). A `Beneficiary` is created for that user, grants assigned, and an invite email sent with the `beneficiaryInviteToken`.
+
+**Case creation rules by role**: Attorney creates → law firm auto-set to own firm, self auto-assigned as attorney, employer is required (from partnership); Employer creates → employer auto-set to own org, law firm required (from partnership), attorney optional (law firm assigns internally).
+
+**Case number counter** — `CaseService.caseCounter` is a non-static `AtomicInteger` initialized via `@PostConstruct` from the DB max sequence for the current year. Prevents unique-constraint collisions after backend restarts.
 
 **Stub user merge** — `CustomOAuth2UserService.loadUser()` falls back to `findByEmail()` after `findByGoogleId()` misses; if the found user has `googleId.startsWith("PENDING_")`, the stub is updated with the real Google ID. This silently links the beneficiary invite to their real Google account on first login.
 
@@ -283,6 +291,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - `GET  /api/immigration/cases` — list accessible cases
 - `GET  /api/immigration/cases/{id}` — detail (403 if no grant)
 - `PUT  /api/immigration/cases/{id}/status` — transition status (state machine validates; auto-sets `i140Approved` on I140 cases)
+- `GET  /api/immigration/cases/{id}/beneficiary/profile` — returns beneficiary's `CanonicalProfile`; requires READ_CASE grant (attorney / HR admin); calls `CanonicalProfileService.getForCase()`
 - `GET  /api/immigration/cases/join/{token}` — public; minimal case info for invite page
 - `POST /api/immigration/cases/join/{token}` — auth required; beneficiary accepts invite; email-match validated
 - `GET  /api/immigration/profile/me` — own canonical profile

@@ -28,6 +28,7 @@ public record ImmigrationCaseDTO(
         // Assigned attorney within the law firm
         Long assignedAttorneyMemberId,
         String assignedAttorneyName,
+        String assignedAttorneyEmail,
 
         // Beneficiary invite status
         boolean beneficiaryInvitePending,  // true = invite sent but not yet accepted

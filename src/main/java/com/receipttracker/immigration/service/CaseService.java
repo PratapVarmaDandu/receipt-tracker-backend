@@ -16,7 +16,9 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -37,7 +39,19 @@ public class CaseService {
     @Autowired private AuditService auditService;
     @Autowired private EmailService emailService;
 
-    private static final AtomicInteger caseCounter = new AtomicInteger(1);
+    private final AtomicInteger caseCounter = new AtomicInteger(1);
+
+    @PostConstruct
+    void initCaseCounter() {
+        String prefix = "IMM-" + Year.now().getValue() + "-";
+        caseRepo.findMaxCaseNumberWithPrefix(prefix).ifPresent(max -> {
+            try {
+                int seq = Integer.parseInt(max.substring(prefix.length()));
+                caseCounter.set(seq + 1);
+                log.info("Case counter initialized to {} from DB", seq + 1);
+            } catch (NumberFormatException ignored) {}
+        });
+    }
 
     // ── User resolution ──────────────────────────────────────────────────────
 
@@ -83,12 +97,11 @@ public class CaseService {
         if (req.employerImmOrgId() != null) {
             employerOrg = immOrgRepo.findById(req.employerImmOrgId())
                     .orElseThrow(() -> new RuntimeException("Employer org not found: " + req.employerImmOrgId()));
+            Long employerOrgId = employerOrg.getId();
             boolean callerInEmployerOrg = callerMemberships.stream()
-                    .anyMatch(m -> m.getImmOrgId().equals(employerOrg.getId()));
+                    .anyMatch(m -> m.getImmOrgId().equals(employerOrgId));
             if (!callerInEmployerOrg) {
-                // Attorney creating a case can also link an employer if they have partnership
-                // Allow through — attorney can link any org to a case they're creating
-                log.info("Caller is not a member of employer org {} — allowing through", req.employerImmOrgId());
+                log.info("Caller is not a member of employer org {} — allowing through", employerOrgId);
             }
         }
 
@@ -325,9 +338,10 @@ public class CaseService {
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     ImmigrationCaseDTO toDTO(ImmigrationCase c, User caller) {
-        String employerName = orgName(c.getEmployerImmOrgId());
-        String lawFirmName  = orgName(c.getLawFirmImmOrgId());
-        String attorneyName = attorneyName(c.getAssignedAttorneyMemberId());
+        String employerName   = orgName(c.getEmployerImmOrgId());
+        String lawFirmName    = orgName(c.getLawFirmImmOrgId());
+        String attorneyName   = attorneyName(c.getAssignedAttorneyMemberId());
+        String attorneyEmail  = attorneyEmail(c.getAssignedAttorneyMemberId());
 
         return new ImmigrationCaseDTO(
                 c.getId(),
@@ -346,7 +360,8 @@ public class CaseService {
                 c.getI140ApprovedDate(),
                 c.getAssignedAttorneyMemberId(),
                 attorneyName,
-                c.getBeneficiaryInviteToken() != null,  // invite still pending
+                attorneyEmail,
+                c.getBeneficiaryInviteToken() != null,
                 c.getCreatedBy().getId(),
                 c.getCreatedAt(),
                 c.getUpdatedAt(),
@@ -359,7 +374,7 @@ public class CaseService {
         return new ImmigrationCaseDTO(
                 c.getId(),
                 c.getCaseNumber(),
-                null, null, null,          // beneficiary info hidden in public view
+                null, null, null,
                 c.getEmployerImmOrgId(), orgName(c.getEmployerImmOrgId()),
                 c.getLawFirmImmOrgId(),  orgName(c.getLawFirmImmOrgId()),
                 c.getCaseType().name(),
@@ -367,8 +382,8 @@ public class CaseService {
                 null, null,
                 c.getParentCaseId(),
                 c.isI140Approved(), null,
-                null, null,
-                true,    // invite is pending (that's why they're viewing this)
+                null, null, null,
+                true,
                 null, null, null,
                 null
         );
@@ -426,6 +441,11 @@ public class CaseService {
                 .orElse(null);
     }
 
+    private String attorneyEmail(Long memberId) {
+        if (memberId == null) return null;
+        return immOrgMemberRepo.findById(memberId).map(ImmOrgMember::getEmail).orElse(null);
+    }
+
     private String computeCallerRelationship(ImmigrationCase c, User caller) {
         List<Grant> grants = grantRepo.findByImmigrationCaseAndRevokedAtIsNull(c);
         List<Long> callerOrgIds = immOrgMemberRepo
@@ -481,8 +501,6 @@ public class CaseService {
     }
 
     private String generateCaseNumber() {
-        return String.format("IMM-%d-%04d",
-                java.time.Year.now().getValue(),
-                caseCounter.getAndIncrement());
+        return String.format("IMM-%d-%04d", Year.now().getValue(), caseCounter.getAndIncrement());
     }
 }

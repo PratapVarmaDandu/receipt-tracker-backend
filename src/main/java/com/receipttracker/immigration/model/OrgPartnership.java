@@ -18,12 +18,18 @@ public class OrgPartnership {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // loose refs to imm_orgs.id
-    @Column(name = "employer_org_id", nullable = false)
+    // loose refs to imm_orgs.id; employerOrgId is null until employer completes onboarding
+    @Column(name = "employer_org_id")
     private Long employerOrgId;
 
     @Column(name = "law_firm_org_id", nullable = false)
     private Long lawFirmOrgId;
+
+    @Column(name = "invite_email")
+    private String inviteEmail;
+
+    @Column(name = "invite_token", unique = true)
+    private String inviteToken;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)

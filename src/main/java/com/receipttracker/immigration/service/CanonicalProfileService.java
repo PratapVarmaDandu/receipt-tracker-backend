@@ -6,11 +6,17 @@ import com.receipttracker.immigration.dto.UpdateProfileRequest;
 import com.receipttracker.immigration.model.Beneficiary;
 import com.receipttracker.immigration.model.CanonicalProfile;
 import com.receipttracker.immigration.model.GrantScope;
+import com.receipttracker.immigration.model.ImmigrationCase;
 import com.receipttracker.immigration.repository.BeneficiaryRepository;
 import com.receipttracker.immigration.repository.CanonicalProfileRepository;
+import com.receipttracker.immigration.repository.ImmigrationCaseRepository;
+import com.receipttracker.model.Document;
 import com.receipttracker.model.User;
+import com.receipttracker.repository.DocumentRepository;
 import com.receipttracker.repository.UserRepository;
+import com.receipttracker.service.DocumentService;
 import com.receipttracker.service.EncryptionService;
+import org.springframework.core.io.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,10 +37,13 @@ public class CanonicalProfileService {
 
     @Autowired private CanonicalProfileRepository profileRepo;
     @Autowired private BeneficiaryRepository beneficiaryRepo;
+    @Autowired private ImmigrationCaseRepository caseRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private EncryptionService encryptionService;
     @Autowired private PermissionService permissionService;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private DocumentRepository documentRepo;
+    @Autowired private DocumentService documentService;
 
     // ── User resolution ──────────────────────────────────────────────────────
 
@@ -78,7 +87,32 @@ public class CanonicalProfileService {
         log.info(">>> getForCase() caseId={}", caseId);
         User user = currentUser();
         permissionService.requireAccess(user, caseId, GrantScope.READ_CASE);
-        throw new UnsupportedOperationException("Implemented in Slice 5 when CaseDetailService is wired");
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        Beneficiary beneficiary = c.getBeneficiary();
+        CanonicalProfile profile = profileRepo.findByBeneficiary(beneficiary)
+                .orElseThrow(() -> new RuntimeException("Beneficiary has not set up their profile yet"));
+        return toDTO(profile);
+    }
+
+    /**
+     * Proxy-download a vault document attached to a beneficiary's profile section.
+     * Requires READ_CASE grant (attorney / HR admin). The document must belong to the beneficiary.
+     */
+    @Transactional(readOnly = true)
+    public Resource downloadProfileDocument(Long caseId, Long docId) throws java.io.IOException {
+        log.info(">>> downloadProfileDocument() caseId={} docId={}", caseId, docId);
+        User caller = currentUser();
+        permissionService.requireAccess(caller, caseId, GrantScope.READ_CASE);
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        Long beneficiaryUserId = c.getBeneficiary().getUser().getId();
+        Document doc = documentRepo.findById(docId)
+                .orElseThrow(() -> new RuntimeException("Document not found: " + docId));
+        if (!doc.getUser().getId().equals(beneficiaryUserId)) {
+            throw new RuntimeException("Access denied: document does not belong to this case's beneficiary");
+        }
+        return documentService.downloadByPath(beneficiaryUserId, doc.getStoredFileName());
     }
 
     /**
@@ -141,7 +175,7 @@ public class CanonicalProfileService {
         if (req.legalFirstName()     != null) p.setLegalFirstName(req.legalFirstName());
         if (req.legalLastName()      != null) p.setLegalLastName(req.legalLastName());
         if (req.middleName()         != null) p.setMiddleName(req.middleName());
-        if (req.dateOfBirth()        != null) p.setDateOfBirth(LocalDate.parse(req.dateOfBirth()));
+        if (req.dateOfBirth()        != null) p.setDateOfBirth(parseDate(req.dateOfBirth()));
         if (req.countryOfBirth()     != null) p.setCountryOfBirth(req.countryOfBirth());
         if (req.citizenshipCountry() != null) p.setCitizenshipCountry(req.citizenshipCountry());
         if (req.gender()             != null) p.setGender(req.gender());

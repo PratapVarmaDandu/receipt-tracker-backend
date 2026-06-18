@@ -29,6 +29,31 @@ public class ImmOrg {
     @Column(name = "owner_user_id")
     private Long ownerUserId;
 
+    // Employer profile fields (nullable for law firms)
+    @Column(name = "contact_name")
+    private String contactName;
+
+    @Column(name = "contact_email")
+    private String contactEmail;
+
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "city")
+    private String city;
+
+    @Column(name = "state_code", length = 10)
+    private String stateCode;
+
+    @Column(name = "zip_code", length = 20)
+    private String zipCode;
+
+    @Column(name = "ein_number", length = 20)
+    private String einNumber;
+
+    @Column(name = "website")
+    private String website;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

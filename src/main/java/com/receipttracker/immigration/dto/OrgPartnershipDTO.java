@@ -4,5 +4,6 @@ public record OrgPartnershipDTO(
         Long id,
         Long employerOrgId, String employerOrgName,
         Long lawFirmOrgId,  String lawFirmOrgName,
-        String status, String createdAt
+        String status, String createdAt,
+        String inviteEmail, String inviteToken
 ) {}

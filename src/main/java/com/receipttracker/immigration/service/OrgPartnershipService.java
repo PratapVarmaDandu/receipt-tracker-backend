@@ -1,7 +1,6 @@
 package com.receipttracker.immigration.service;
 
-import com.receipttracker.immigration.dto.CreatePartnershipRequest;
-import com.receipttracker.immigration.dto.OrgPartnershipDTO;
+import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.model.*;
 import com.receipttracker.immigration.repository.ImmOrgMemberRepository;
 import com.receipttracker.immigration.repository.ImmOrgRepository;
@@ -19,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class OrgPartnershipService {
@@ -115,6 +115,101 @@ public class OrgPartnershipService {
         partnershipRepo.save(p);
     }
 
+    @Transactional
+    public OrgPartnershipDTO inviteEmployer(PartnershipInviteRequest req) {
+        User caller = currentUser();
+        immOrgRepo.findById(req.lawFirmOrgId())
+                .filter(o -> o.getOrgType() == ImmOrgType.LAW_FIRM)
+                .orElseThrow(() -> new RuntimeException("Law firm org not found: " + req.lawFirmOrgId()));
+        if (!isActiveMember(caller.getId(), req.lawFirmOrgId())) {
+            throw new RuntimeException("Access denied: not a member of law firm org " + req.lawFirmOrgId());
+        }
+
+        String token = UUID.randomUUID().toString();
+        OrgPartnership p = new OrgPartnership();
+        p.setLawFirmOrgId(req.lawFirmOrgId());
+        p.setInviteEmail(req.employerEmail().toLowerCase().trim());
+        p.setInviteToken(token);
+        p.setStatus(OrgPartnershipStatus.PENDING);
+        p.setInitiatedByUserId(caller.getId());
+        OrgPartnership saved = partnershipRepo.save(p);
+
+        log.warn("IMM_EMPLOYER_INVITE lawFirmOrgId={} email={} token={}", req.lawFirmOrgId(), req.employerEmail(), token);
+        return enrichDTO(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public PartnershipJoinInfoDTO getOnboardInfo(String token) {
+        OrgPartnership p = partnershipRepo.findByInviteToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired invite link"));
+        String lawFirmName = immOrgRepo.findById(p.getLawFirmOrgId())
+                .map(ImmOrg::getName).orElse("Unknown");
+        return new PartnershipJoinInfoDTO(p.getId(), p.getLawFirmOrgId(), lawFirmName,
+                p.getInviteEmail(), p.getStatus().name());
+    }
+
+    @Transactional
+    public OrgPartnershipDTO completeOnboarding(String token, EmployerOnboardRequest req) {
+        User caller = currentUser();
+
+        OrgPartnership p = partnershipRepo.findByInviteToken(token)
+                .orElseThrow(() -> new RuntimeException("Invalid or expired invite link"));
+
+        if (!p.getInviteEmail().equalsIgnoreCase(caller.getEmail())) {
+            throw new RuntimeException("This invite is not for your email address");
+        }
+        if (p.getStatus() == OrgPartnershipStatus.ACTIVE) {
+            return enrichDTO(p);
+        }
+
+        // Reject if caller already belongs to a LAW_FIRM org (cannot be both)
+        List<ImmOrg> existingOrgs = immOrgRepo.findByMemberUserId(caller.getId());
+        boolean hasConflict = existingOrgs.stream().anyMatch(o -> o.getOrgType() == ImmOrgType.LAW_FIRM);
+        if (hasConflict) {
+            throw new RuntimeException("You are already registered as a law firm. A user cannot be both an employer and an attorney/law firm.");
+        }
+
+        // Reuse existing employer org if caller already has one, otherwise create
+        ImmOrg employerOrg = existingOrgs.stream()
+                .filter(o -> o.getOrgType() == ImmOrgType.EMPLOYER)
+                .findFirst()
+                .orElse(null);
+
+        if (employerOrg == null) {
+            employerOrg = new ImmOrg();
+            employerOrg.setOrgType(ImmOrgType.EMPLOYER);
+            employerOrg.setOwnerUserId(caller.getId());
+            employerOrg = immOrgRepo.save(employerOrg);
+
+            ImmOrgMember owner = new ImmOrgMember();
+            owner.setImmOrgId(employerOrg.getId());
+            owner.setUserId(caller.getId());
+            owner.setEmail(caller.getEmail());
+            owner.setRole(ImmOrgMemberRole.OWNER);
+            owner.setStatus(ImmOrgMemberStatus.ACTIVE);
+            immOrgMemberRepo.save(owner);
+        }
+
+        // Apply employer profile details
+        employerOrg.setName(req.orgName());
+        employerOrg.setContactName(req.contactName());
+        employerOrg.setContactEmail(req.contactEmail());
+        employerOrg.setAddress(req.address());
+        employerOrg.setCity(req.city());
+        employerOrg.setStateCode(req.stateCode());
+        employerOrg.setZipCode(req.zipCode());
+        employerOrg.setEinNumber(req.einNumber());
+        employerOrg.setWebsite(req.website());
+        immOrgRepo.save(employerOrg);
+
+        // Activate the partnership
+        p.setEmployerOrgId(employerOrg.getId());
+        p.setStatus(OrgPartnershipStatus.ACTIVE);
+        OrgPartnership saved = partnershipRepo.save(p);
+        log.info("<<< completeOnboarding() partnershipId={} employerOrgId={}", saved.getId(), employerOrg.getId());
+        return enrichDTO(saved);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private boolean isActiveMember(Long userId, Long orgId) {
@@ -123,13 +218,15 @@ public class OrgPartnershipService {
     }
 
     OrgPartnershipDTO enrichDTO(OrgPartnership p) {
-        String employerName = immOrgRepo.findById(p.getEmployerOrgId())
-                .map(ImmOrg::getName).orElse("Unknown");
+        String employerName = p.getEmployerOrgId() != null
+                ? immOrgRepo.findById(p.getEmployerOrgId()).map(ImmOrg::getName).orElse("Unknown")
+                : "(Pending)";
         String lawFirmName = immOrgRepo.findById(p.getLawFirmOrgId())
                 .map(ImmOrg::getName).orElse("Unknown");
         return new OrgPartnershipDTO(p.getId(),
                 p.getEmployerOrgId(), employerName,
                 p.getLawFirmOrgId(), lawFirmName,
-                p.getStatus().name(), p.getCreatedAt().toString());
+                p.getStatus().name(), p.getCreatedAt().toString(),
+                p.getInviteEmail(), p.getInviteToken());
     }
 }
