@@ -148,7 +148,7 @@ public class CanonicalProfileService {
                 p.getLegalFirstName(),
                 p.getLegalLastName(),
                 p.getMiddleName(),
-                p.getDateOfBirth()     != null ? p.getDateOfBirth().toString()     : null,
+                p.getDateOfBirth()       != null ? p.getDateOfBirth().toString()       : null,
                 p.getCountryOfBirth(),
                 p.getCitizenshipCountry(),
                 p.getGender(),
@@ -163,6 +163,22 @@ public class CanonicalProfileService {
                 parseJson(p.getDependentsJson()),
                 parseJson(p.getPriorVisasJson()),
                 p.getNotes(),
+                // Sensitive presence flags — raw values never returned
+                p.getSsnEnc()          != null && !p.getSsnEnc().isBlank(),
+                p.getAlienNumberEnc()  != null && !p.getAlienNumberEnc().isBlank(),
+                p.getI94NumberEnc()    != null && !p.getI94NumberEnc().isBlank(),
+                p.getEadCardNumberEnc() != null && !p.getEadCardNumberEnc().isBlank(),
+                // EAD (non-sensitive)
+                p.getEadCategory(),
+                p.getEadExpiryDate()   != null ? p.getEadExpiryDate().toString()   : null,
+                p.getEadCaseNumber(),
+                // Notification preferences
+                p.isNotificationEmailEnabled(),
+                p.isNotificationSmsEnabled(),
+                p.getNotificationPhone(),
+                // USCIS / profile preferences
+                p.getUscisOnlineAccountNumber(),
+                p.getPreferredLanguage() != null ? p.getPreferredLanguage() : "en",
                 p.getCreatedAt(),
                 p.getUpdatedAt()
         );
@@ -199,6 +215,34 @@ public class CanonicalProfileService {
 
         // Contact
         if (req.phone() != null) p.setPhone(req.phone());
+
+        // Sensitive fields — encrypt before persist; audit hash only (never log plaintext)
+        if (req.alienNumber()   != null && !req.alienNumber().isBlank())
+            p.setAlienNumberEnc(encryptionService.encrypt(req.alienNumber()));
+        if (req.ssn()           != null && !req.ssn().isBlank())
+            p.setSsnEnc(encryptionService.encrypt(req.ssn()));
+        if (req.i94Number()     != null && !req.i94Number().isBlank()) {
+            p.setI94NumberEnc(encryptionService.encrypt(req.i94Number()));
+            // Auto-migrate: also write legacy plain column so FormMappingService keeps working
+            // until it is updated to read the encrypted column
+            p.setI94Number(req.i94Number());
+        }
+        if (req.eadCardNumber() != null && !req.eadCardNumber().isBlank())
+            p.setEadCardNumberEnc(encryptionService.encrypt(req.eadCardNumber()));
+
+        // EAD metadata (non-sensitive)
+        if (req.eadCategory()   != null) p.setEadCategory(req.eadCategory());
+        if (req.eadExpiryDate() != null) p.setEadExpiryDate(parseDate(req.eadExpiryDate()));
+        if (req.eadCaseNumber() != null) p.setEadCaseNumber(req.eadCaseNumber());
+
+        // Notification preferences
+        if (req.notificationEmailEnabled() != null) p.setNotificationEmailEnabled(req.notificationEmailEnabled());
+        if (req.notificationSmsEnabled()   != null) p.setNotificationSmsEnabled(req.notificationSmsEnabled());
+        if (req.notificationPhone()        != null) p.setNotificationPhone(req.notificationPhone());
+
+        // USCIS / profile preferences
+        if (req.uscisOnlineAccountNumber() != null) p.setUscisOnlineAccountNumber(req.uscisOnlineAccountNumber());
+        if (req.preferredLanguage()        != null) p.setPreferredLanguage(req.preferredLanguage());
 
         // JSON sub-fields
         if (req.currentAddress() != null) p.setCurrentAddressJson(toJson(req.currentAddress()));

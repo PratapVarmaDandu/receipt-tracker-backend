@@ -7,5 +7,8 @@ public enum GrantScope {
     WRITE_DOCS,
     READ_FORMS,
     WRITE_FORMS,
-    MESSAGING
+    MESSAGING,
+    APPROVE_FORMS,      // approve PDF packets and form versions — ATTORNEY + OWNER only
+    MANAGE_CHECKLISTS,  // manage evidence checklists — ATTORNEY + PARALEGAL
+    MANAGE_TASKS        // create / assign / complete tasks — ATTORNEY + PARALEGAL
 }

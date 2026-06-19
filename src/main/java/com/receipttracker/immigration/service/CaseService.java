@@ -1,12 +1,17 @@
 package com.receipttracker.immigration.service;
 
+import com.receipttracker.immigration.dto.CloneCaseRequest;
+import com.receipttracker.immigration.dto.ConflictCheckRequest;
 import com.receipttracker.immigration.dto.CreateCaseRequest;
+import com.receipttracker.immigration.dto.FamilyBundleDTO;
 import com.receipttracker.immigration.dto.ImmigrationCaseDTO;
+import com.receipttracker.immigration.dto.StatusHistoryDTO;
 import com.receipttracker.immigration.model.*;
 import com.receipttracker.immigration.repository.*;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
 import com.receipttracker.service.EmailService;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +26,7 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -34,6 +40,7 @@ public class CaseService {
     @Autowired private GrantRepository grantRepo;
     @Autowired private ImmOrgRepository immOrgRepo;
     @Autowired private ImmOrgMemberRepository immOrgMemberRepo;
+    @Autowired private StatusHistoryRepository statusHistoryRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private PermissionService permissionService;
     @Autowired private AuditService auditService;
@@ -233,6 +240,15 @@ public class CaseService {
         }
 
         ImmigrationCase saved = caseRepo.save(c);
+
+        // Persist immutable status history row
+        StatusHistory hist = new StatusHistory();
+        hist.setImmigrationCase(saved);
+        hist.setFromStatus(oldStatus.name());
+        hist.setToStatus(newStatus.name());
+        hist.setChangedByUserId(user.getId());
+        statusHistoryRepo.save(hist);
+
         auditService.append(saved, user, "STATUS_CHANGED",
                 "{\"from\":\"" + oldStatus.name() + "\",\"to\":\"" + newStatus.name() + "\"}",
                 FeedVisibility.ALL);
@@ -355,6 +371,133 @@ public class CaseService {
         return toDTO(saved, caller);
     }
 
+    // ── Status history (FEAT-QW4) ────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<StatusHistoryDTO> getStatusHistory(Long caseId) {
+        log.info(">>> getStatusHistory() caseId={}", caseId);
+        User user = currentUser();
+        permissionService.requireAccess(user, caseId, GrantScope.READ_CASE);
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        return statusHistoryRepo.findByImmigrationCaseOrderByChangedAtDesc(c)
+                .stream().map(this::toStatusHistoryDTO).toList();
+    }
+
+    // ── Case cloning (FEAT-QW3) ──────────────────────────────────────────────
+
+    @Transactional
+    public ImmigrationCaseDTO cloneCase(Long sourceId, CloneCaseRequest req) {
+        log.info(">>> cloneCase() sourceId={} newCaseType={}", sourceId, req.newCaseType());
+        User caller = currentUser();
+        permissionService.requireAccess(caller, sourceId, GrantScope.WRITE_CASE);
+
+        ImmigrationCase src = caseRepo.findById(sourceId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + sourceId));
+
+        CaseType newCaseType;
+        try {
+            newCaseType = CaseType.valueOf(req.newCaseType());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Unknown caseType: " + req.newCaseType());
+        }
+
+        ImmigrationCase clone = new ImmigrationCase();
+        clone.setCaseNumber(generateCaseNumber());
+        clone.setBeneficiary(src.getBeneficiary());
+        clone.setEmployerImmOrgId(src.getEmployerImmOrgId());
+        clone.setLawFirmImmOrgId(src.getLawFirmImmOrgId());
+        clone.setAssignedAttorneyMemberId(src.getAssignedAttorneyMemberId());
+        clone.setCaseType(newCaseType);
+        clone.setStatus(CaseStatus.PROSPECTIVE);
+        clone.setCreatedBy(caller);
+        // parentCaseId, beneficiaryInviteToken — not cloned; beneficiary already linked
+
+        ImmigrationCase saved = caseRepo.save(clone);
+
+        // Copy all active grants from source case to the clone
+        List<Grant> sourceGrants = grantRepo.findByImmigrationCaseAndRevokedAtIsNull(src);
+        for (Grant srcGrant : sourceGrants) {
+            Grant g = new Grant();
+            g.setImmigrationCase(saved);
+            g.setSubjectUser(srcGrant.getSubjectUser());
+            g.setSubjectImmOrgId(srcGrant.getSubjectImmOrgId());
+            g.setRelationship(srcGrant.getRelationship());
+            g.setScope(srcGrant.getScope());
+            g.setGrantedBy(caller);
+            grantRepo.save(g);
+        }
+
+        auditService.append(saved, caller, "CASE_CLONED",
+                "{\"clonedFromCaseId\":" + sourceId + ",\"newCaseType\":\"" + newCaseType.name() + "\"}",
+                FeedVisibility.ALL);
+
+        log.info("<<< cloneCase() newCaseId={} caseNumber={}", saved.getId(), saved.getCaseNumber());
+        return toDTO(saved, caller);
+    }
+
+    // ── Conflict check (FEAT-QW5) ────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<ImmigrationCaseDTO> checkConflict(ConflictCheckRequest req) {
+        log.info(">>> checkConflict() email={}", req.beneficiaryEmail());
+        User caller = currentUser();
+
+        // Require ATTORNEY or OWNER role in a LAW_FIRM org
+        List<Long> callerLawFirmIds = immOrgMemberRepo
+                .findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream()
+                .filter(m -> m.getRole() == ImmOrgMemberRole.ATTORNEY || m.getRole() == ImmOrgMemberRole.OWNER)
+                .map(ImmOrgMember::getImmOrgId)
+                .filter(orgId -> immOrgRepo.findById(orgId)
+                        .map(o -> o.getOrgType() == ImmOrgType.LAW_FIRM)
+                        .orElse(false))
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (callerLawFirmIds.isEmpty()) {
+            throw new RuntimeException("Access denied: ATTORNEY or OWNER role in a law firm required");
+        }
+
+        String emailLower = req.beneficiaryEmail() != null
+                ? req.beneficiaryEmail().trim().toLowerCase() : "";
+
+        Set<Long> seen = new java.util.HashSet<>();
+        return callerLawFirmIds.stream()
+                .flatMap(id -> caseRepo.findByLawFirmImmOrgIdOrderByCreatedAtDesc(id).stream())
+                .filter(c -> {
+                    boolean emailMatch = !emailLower.isEmpty()
+                            && c.getBeneficiary().getUser().getEmail().toLowerCase().equals(emailLower);
+                    boolean orgMatch = req.employerOrgId() != null
+                            && req.employerOrgId().equals(c.getEmployerImmOrgId());
+                    return emailMatch || orgMatch;
+                })
+                .filter(c -> seen.add(c.getId()))
+                .map(c -> toDTO(c, caller))
+                .collect(Collectors.toList());
+    }
+
+    // ── Family bundle (FEAT-QW6) ─────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public FamilyBundleDTO getFamily(Long caseId) {
+        log.info(">>> getFamily() caseId={}", caseId);
+        User caller = currentUser();
+        permissionService.requireAccess(caller, caseId, GrantScope.READ_CASE);
+
+        ImmigrationCase primary = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        ImmigrationCaseDTO primaryDTO = toDTO(primary, caller);
+
+        List<ImmigrationCaseDTO> dependentDTOs = caseRepo
+                .findByParentCaseIdOrderByCreatedAtDesc(caseId)
+                .stream()
+                .map(c -> toDTO(c, caller))
+                .collect(Collectors.toList());
+
+        return new FamilyBundleDTO(primaryDTO, dependentDTOs);
+    }
+
     // ── Grant helpers ────────────────────────────────────────────────────────
 
     @Transactional
@@ -434,6 +577,23 @@ public class CaseService {
                 true,
                 null, null, null,
                 null
+        );
+    }
+
+    private StatusHistoryDTO toStatusHistoryDTO(StatusHistory h) {
+        String name = null;
+        if (h.getChangedByUserId() != null) {
+            name = userRepo.findById(h.getChangedByUserId()).map(User::getName).orElse(null);
+        }
+        return new StatusHistoryDTO(
+                h.getId(),
+                h.getImmigrationCase().getId(),
+                h.getFromStatus(),
+                h.getToStatus(),
+                h.getChangedByUserId(),
+                name,
+                h.getChangedAt(),
+                h.getNote()
         );
     }
 

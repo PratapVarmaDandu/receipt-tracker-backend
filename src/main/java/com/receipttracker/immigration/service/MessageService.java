@@ -163,6 +163,10 @@ public class MessageService {
                 relationships.contains(CaseRelationship.ATTORNEY) ||
                 relationships.contains(CaseRelationship.PARALEGAL) ||
                 relationships.contains(CaseRelationship.HR_ADMIN);
+            case ATTORNEY_INTERNAL ->
+                // Law-firm-internal channel: attorney + paralegal only; never beneficiary or HR_ADMIN
+                relationships.contains(CaseRelationship.ATTORNEY) ||
+                relationships.contains(CaseRelationship.PARALEGAL);
             case SHARED -> true;
         };
 

@@ -316,6 +316,17 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - `GET  /api/immigration/cases/{id}/messages/{channel}` — messages for channel (MESSAGING scope + channel access)
 - `POST /api/immigration/cases/{id}/messages/{channel}` — send message
 
+**Org partnership routes** (`/api/immigration/partnerships`):
+- `POST /api/immigration/partnerships` — direct partnership (both orgs already exist; caller must be member of one)
+- `GET  /api/immigration/partnerships/mine` — list partnerships for caller's orgs
+- `PUT  /api/immigration/partnerships/{id}/accept` — accept (caller must be member of the other org)
+- `PUT  /api/immigration/partnerships/{id}/end` — end (member of either org)
+- `POST /api/immigration/partnerships/invite` — attorney invites employer by email; creates PENDING row with `inviteEmail` + `inviteToken`; sends onboarding link; `employerOrgId` is null until onboarding completes
+- `GET  /api/immigration/partnerships/onboard/{token}` — public; returns law firm name + invite email for the landing page
+- `POST /api/immigration/partnerships/onboard/{token}` — auth required; employer completes their org profile; validates `caller.email == partnership.inviteEmail` (403 on mismatch); creates or reuses EMPLOYER org; sets `employerOrgId`, activates partnership
+
+**Employer onboarding email-match** — same pattern as `POST /api/immigration/cases/join/{token}` (beneficiary invite). The throw message starts with `"Access denied:"` so `OrgPartnershipController.denied()` returns 403, not 400. Locally this always fails because `LocalDevSecurityFilter` injects `dev@localhost.local` — see CLAUDE.local.md for how to test.
+
 ## Tests
 All tests live under `src/test/java/com/receipttracker/`.
 

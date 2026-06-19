@@ -1,8 +1,12 @@
 package com.receipttracker.immigration.controller;
 
 import com.receipttracker.immigration.dto.CanonicalProfileDTO;
+import com.receipttracker.immigration.dto.CloneCaseRequest;
+import com.receipttracker.immigration.dto.ConflictCheckRequest;
 import com.receipttracker.immigration.dto.CreateCaseRequest;
+import com.receipttracker.immigration.dto.FamilyBundleDTO;
 import com.receipttracker.immigration.dto.ImmigrationCaseDTO;
+import com.receipttracker.immigration.dto.StatusHistoryDTO;
 import com.receipttracker.immigration.service.CanonicalProfileService;
 import com.receipttracker.immigration.service.CaseService;
 import org.slf4j.Logger;
@@ -193,6 +197,74 @@ public class CaseController {
             if (msg != null && msg.startsWith("This invite is not for your account")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    /** Conflict-of-interest check before opening a new case (ATTORNEY/OWNER in a law firm). */
+    @PostMapping("/conflict-check")
+    public ResponseEntity<?> conflictCheck(@RequestBody ConflictCheckRequest req) {
+        log.info("POST /api/immigration/cases/conflict-check email={}", req.beneficiaryEmail());
+        try {
+            List<ImmigrationCaseDTO> conflicts = caseService.checkConflict(req);
+            return ResponseEntity.ok(conflicts);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            log.error("!!! conflictCheck failed: {}", msg);
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    /** Returns the primary case + all dependent cases (parentCaseId = id). Requires READ_CASE grant. */
+    @GetMapping("/{id}/family")
+    public ResponseEntity<?> getFamily(@PathVariable Long id) {
+        log.info("GET /api/immigration/cases/{}/family", id);
+        try {
+            FamilyBundleDTO bundle = caseService.getFamily(id);
+            return ResponseEntity.ok(bundle);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            log.error("!!! getFamily {} failed: {}", id, msg);
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    /** Clone an existing case as a new case type (attorney only). Requires WRITE_CASE grant. */
+    @PostMapping("/{id}/clone")
+    public ResponseEntity<?> cloneCase(@PathVariable Long id, @RequestBody CloneCaseRequest req) {
+        log.info("POST /api/immigration/cases/{}/clone newCaseType={}", id, req.newCaseType());
+        try {
+            ImmigrationCaseDTO dto = caseService.cloneCase(id, req);
+            return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            log.error("!!! cloneCase {} failed: {}", id, msg);
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    /** Get status change history for a case. Requires READ_CASE grant. */
+    @GetMapping("/{id}/status-history")
+    public ResponseEntity<?> getStatusHistory(@PathVariable Long id) {
+        log.info("GET /api/immigration/cases/{}/status-history", id);
+        try {
+            List<StatusHistoryDTO> history = caseService.getStatusHistory(id);
+            return ResponseEntity.ok(history);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            log.error("!!! getStatusHistory {} failed: {}", id, msg);
             return ResponseEntity.badRequest().body(Map.of("error", msg));
         }
     }

@@ -169,7 +169,7 @@ public class OrgPartnershipService {
                 .orElseThrow(() -> new RuntimeException("Invalid or expired invite link"));
 
         if (!p.getInviteEmail().equalsIgnoreCase(caller.getEmail())) {
-            throw new RuntimeException("This invite is not for your email address");
+            throw new RuntimeException("Access denied: this invite is not for your email address");
         }
         if (p.getStatus() == OrgPartnershipStatus.ACTIVE) {
             return enrichDTO(p);

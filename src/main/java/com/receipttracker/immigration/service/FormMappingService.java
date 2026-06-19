@@ -33,6 +33,33 @@ public class FormMappingService {
             "passportIssueDate", "passportExpiryDate"
     );
 
+    // TODO: verify required field lists against official form instructions before use in production
+    private static final List<String> I485_REQUIRED = List.of(
+            "legalLastName", "legalFirstName", "dateOfBirth", "countryOfBirth",
+            "citizenshipCountry", "alienNumber", "ssn"
+    );
+
+    private static final List<String> I765_REQUIRED = List.of(
+            "legalLastName", "legalFirstName", "dateOfBirth", "countryOfBirth",
+            "citizenshipCountry", "ssn"
+    );
+
+    private static final List<String> I131_REQUIRED = List.of(
+            "legalLastName", "legalFirstName", "dateOfBirth", "citizenshipCountry",
+            "passportNumber", "passportExpiryDate"
+    );
+
+    private static final List<String> I140_REQUIRED = List.of(
+            "legalLastName", "legalFirstName", "dateOfBirth", "countryOfBirth",
+            "citizenshipCountry", "passportNumber"
+    );
+
+    private static final List<String> I539_REQUIRED = List.of(
+            "legalLastName", "legalFirstName", "dateOfBirth", "countryOfBirth",
+            "citizenshipCountry", "passportNumber", "i94AdmissionNumber",
+            "currentNonimmigrantStatus"
+    );
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
@@ -43,6 +70,13 @@ public class FormMappingService {
         return switch (formType) {
             case I129  -> mapI129(p);
             case DS160 -> mapDs160(p);
+            case I485  -> mapI485(p);
+            case I765  -> mapI765(p);
+            case I131  -> mapI131(p);
+            case I140  -> mapI140(p);
+            case I539  -> mapI539(p);
+            // G-28, I-290B, I-693: no beneficiary profile fields map directly; return empty
+            case G28, I290B, I693 -> new LinkedHashMap<>();
         };
     }
 
@@ -51,6 +85,12 @@ public class FormMappingService {
         List<String> required = switch (formType) {
             case I129  -> I129_REQUIRED;
             case DS160 -> DS160_REQUIRED;
+            case I485  -> I485_REQUIRED;
+            case I765  -> I765_REQUIRED;
+            case I131  -> I131_REQUIRED;
+            case I140  -> I140_REQUIRED;
+            case I539  -> I539_REQUIRED;
+            case G28, I290B, I693 -> List.of();
         };
         if (required.isEmpty()) return 0;
         long filled = required.stream()
@@ -132,6 +172,105 @@ public class FormMappingService {
         // Contact
         m.put("phone", p.getPhone());
 
+        return m;
+    }
+
+    // ── I-485 mapping ─────────────────────────────────────────────────────────
+
+    private Map<String, Object> mapI485(CanonicalProfile p) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        // TODO: verify field against official form instruction (I-485 Part 1)
+        m.put("legalLastName",       p.getLegalLastName());
+        m.put("legalFirstName",      p.getLegalFirstName());
+        m.put("middleName",          p.getMiddleName());
+        m.put("dateOfBirth",         str(p.getDateOfBirth()));
+        m.put("countryOfBirth",      p.getCountryOfBirth());
+        m.put("citizenshipCountry",  p.getCitizenshipCountry());
+        m.put("gender",              p.getGender());
+        // Sensitive — marker only; decrypted at PDF generation time
+        m.put("alienNumber",  p.getAlienNumberEnc()  != null ? "[encrypted]" : null);
+        m.put("ssn",          p.getSsnEnc()          != null ? "[encrypted]" : null);
+        m.put("passportNumber", p.getPassportNumberEnc() != null ? "[encrypted]" : null);
+        m.put("passportExpiryDate",  str(p.getPassportExpiryDate()));
+        m.put("i94AdmissionNumber",  p.getI94Number());
+        m.put("portOfEntry",         p.getPortOfEntry());
+        m.put("lastEntryDate",       str(p.getEntryDate()));
+        m.put("currentVisaType",     p.getCurrentVisaType());
+        m.put("currentVisaExpiry",   str(p.getCurrentVisaExpiry()));
+        return m;
+    }
+
+    // ── I-765 mapping ─────────────────────────────────────────────────────────
+
+    private Map<String, Object> mapI765(CanonicalProfile p) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        // TODO: verify field against official form instruction (I-765 Part 2)
+        m.put("legalLastName",      p.getLegalLastName());
+        m.put("legalFirstName",     p.getLegalFirstName());
+        m.put("middleName",         p.getMiddleName());
+        m.put("dateOfBirth",        str(p.getDateOfBirth()));
+        m.put("countryOfBirth",     p.getCountryOfBirth());
+        m.put("citizenshipCountry", p.getCitizenshipCountry());
+        m.put("gender",             p.getGender());
+        m.put("ssn",        p.getSsnEnc()         != null ? "[encrypted]" : null);
+        m.put("alienNumber", p.getAlienNumberEnc() != null ? "[encrypted]" : null);
+        m.put("eadCategory",     p.getEadCategory());
+        m.put("eadCaseNumber",   p.getEadCaseNumber());
+        return m;
+    }
+
+    // ── I-131 mapping ─────────────────────────────────────────────────────────
+
+    private Map<String, Object> mapI131(CanonicalProfile p) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        // TODO: verify field against official form instruction (I-131 Part 1)
+        m.put("legalLastName",      p.getLegalLastName());
+        m.put("legalFirstName",     p.getLegalFirstName());
+        m.put("middleName",         p.getMiddleName());
+        m.put("dateOfBirth",        str(p.getDateOfBirth()));
+        m.put("citizenshipCountry", p.getCitizenshipCountry());
+        m.put("alienNumber",   p.getAlienNumberEnc()     != null ? "[encrypted]" : null);
+        m.put("passportNumber", p.getPassportNumberEnc() != null ? "[encrypted]" : null);
+        m.put("passportExpiryDate", str(p.getPassportExpiryDate()));
+        m.put("currentVisaType",    p.getCurrentVisaType());
+        return m;
+    }
+
+    // ── I-140 mapping ─────────────────────────────────────────────────────────
+
+    private Map<String, Object> mapI140(CanonicalProfile p) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        // TODO: verify field against official form instruction (I-140 Part 3)
+        m.put("legalLastName",      p.getLegalLastName());
+        m.put("legalFirstName",     p.getLegalFirstName());
+        m.put("middleName",         p.getMiddleName());
+        m.put("dateOfBirth",        str(p.getDateOfBirth()));
+        m.put("countryOfBirth",     p.getCountryOfBirth());
+        m.put("citizenshipCountry", p.getCitizenshipCountry());
+        m.put("alienNumber",    p.getAlienNumberEnc()     != null ? "[encrypted]" : null);
+        m.put("passportNumber", p.getPassportNumberEnc()  != null ? "[encrypted]" : null);
+        return m;
+    }
+
+    // ── I-539 mapping ─────────────────────────────────────────────────────────
+
+    private Map<String, Object> mapI539(CanonicalProfile p) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        // TODO: verify field against official form instruction (I-539 Part 1)
+        m.put("legalLastName",      p.getLegalLastName());
+        m.put("legalFirstName",     p.getLegalFirstName());
+        m.put("middleName",         p.getMiddleName());
+        m.put("dateOfBirth",        str(p.getDateOfBirth()));
+        m.put("countryOfBirth",     p.getCountryOfBirth());
+        m.put("citizenshipCountry", p.getCitizenshipCountry());
+        m.put("alienNumber",    p.getAlienNumberEnc()     != null ? "[encrypted]" : null);
+        m.put("passportNumber", p.getPassportNumberEnc()  != null ? "[encrypted]" : null);
+        m.put("passportExpiryDate",         str(p.getPassportExpiryDate()));
+        m.put("i94AdmissionNumber",         p.getI94Number());
+        m.put("currentNonimmigrantStatus",  p.getCurrentVisaType());
+        m.put("currentStatusExpiryDate",    str(p.getCurrentVisaExpiry()));
+        m.put("portOfEntry",                p.getPortOfEntry());
+        m.put("lastEntryDate",              str(p.getEntryDate()));
         return m;
     }
 

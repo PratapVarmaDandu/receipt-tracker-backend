@@ -1,7 +1,10 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.immigration.dto.AttorneyProfileDTO;
 import com.receipttracker.immigration.dto.CreateImmOrgRequest;
 import com.receipttracker.immigration.dto.InviteMemberRequest;
+import com.receipttracker.immigration.dto.UpdateAttorneyProfileRequest;
+import com.receipttracker.immigration.service.AttorneyProfileService;
 import com.receipttracker.immigration.service.ImmOrgService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +22,7 @@ public class ImmOrgController {
     private static final Logger log = LoggerFactory.getLogger(ImmOrgController.class);
 
     @Autowired private ImmOrgService immOrgService;
+    @Autowired private AttorneyProfileService attorneyProfileService;
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody CreateImmOrgRequest req) {
@@ -92,6 +96,34 @@ public class ImmOrgController {
     public ResponseEntity<?> acceptInvite(@PathVariable String token) {
         try {
             return ResponseEntity.ok(immOrgService.acceptInvite(token));
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
+    // ── Attorney profile (FEAT-QW1) ───────────────────────────────────────────
+
+    /** Returns the attorney profile for the calling user in this org (ATTORNEY + OWNER only). */
+    @GetMapping("/{id}/attorney-profile")
+    public ResponseEntity<?> getAttorneyProfile(@PathVariable Long id) {
+        log.info("GET /api/immigration/orgs/{}/attorney-profile", id);
+        try {
+            AttorneyProfileDTO dto = attorneyProfileService.get(id);
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
+    /** Creates or updates the attorney profile for the calling user (ATTORNEY + OWNER only). */
+    @PutMapping("/{id}/attorney-profile")
+    public ResponseEntity<?> updateAttorneyProfile(
+            @PathVariable Long id,
+            @RequestBody UpdateAttorneyProfileRequest req) {
+        log.info("PUT /api/immigration/orgs/{}/attorney-profile", id);
+        try {
+            AttorneyProfileDTO dto = attorneyProfileService.update(id, req);
+            return ResponseEntity.ok(dto);
         } catch (RuntimeException e) {
             return denied(e);
         }

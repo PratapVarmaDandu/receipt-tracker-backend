@@ -31,6 +31,8 @@ public interface ImmigrationCaseRepository extends JpaRepository<ImmigrationCase
 
     Optional<ImmigrationCase> findByBeneficiaryInviteToken(String token);
 
+    List<ImmigrationCase> findByParentCaseIdOrderByCreatedAtDesc(Long parentCaseId);
+
     @Query("SELECT MAX(c.caseNumber) FROM ImmigrationCase c WHERE c.caseNumber LIKE :prefix%")
     Optional<String> findMaxCaseNumberWithPrefix(@Param("prefix") String prefix);
 }

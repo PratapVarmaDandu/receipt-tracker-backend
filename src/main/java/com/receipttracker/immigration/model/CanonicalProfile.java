@@ -53,7 +53,34 @@ public class CanonicalProfile {
     @Column(name = "entry_date")       private LocalDate entryDate;
 
     // TODO: verify field against official form instruction (I-94 admission number is 11 digits)
+    // Legacy plain column — kept for backward compat; prefer i94_number_enc for new writes
     @Column(name = "i94_number")       private String i94Number;
+
+    // AES-256-GCM encrypted I-94 number — supersedes i94_number plain column
+    @Column(name = "i94_number_enc", length = 1024)
+    private String i94NumberEnc;
+
+    // TODO: verify field against official form instruction (A-Number is 9 digits, A-XXXXXXXXX format)
+    @Column(name = "alien_number_enc", length = 1024)
+    private String alienNumberEnc; // AES-256-GCM encrypted
+
+    // TODO: verify field against official form instruction (SSN format NNN-NN-NNNN)
+    @Column(name = "ssn_enc", length = 1024)
+    private String ssnEnc; // AES-256-GCM encrypted — required for I-485, I-765
+
+    // ── EAD (Employment Authorization Document) ────────────────────────────────
+    @Column(name = "ead_card_number_enc", length = 1024)
+    private String eadCardNumberEnc; // AES-256-GCM encrypted
+
+    // TODO: verify field against official form instruction (EAD category codes e.g. (c)(3)(C), (a)(17))
+    @Column(name = "ead_category", length = 50)
+    private String eadCategory;
+
+    @Column(name = "ead_expiry_date")
+    private LocalDate eadExpiryDate;
+
+    @Column(name = "ead_case_number", length = 100)
+    private String eadCaseNumber;
 
     // Free text — the visa class printed on the visa stamp (e.g. H-1B, F-1, L-1)
     @Column(name = "current_visa_type")   private String currentVisaType;
@@ -61,6 +88,23 @@ public class CanonicalProfile {
 
     // ── Contact ───────────────────────────────────────────────────────────────
     @Column(name = "phone") private String phone;
+
+    // ── Notification preferences ──────────────────────────────────────────────
+    @Column(name = "notification_email_enabled", nullable = false)
+    private boolean notificationEmailEnabled = true;
+
+    @Column(name = "notification_sms_enabled", nullable = false)
+    private boolean notificationSmsEnabled = false;
+
+    @Column(name = "notification_phone", length = 30)
+    private String notificationPhone;
+
+    // ── USCIS / profile preferences ───────────────────────────────────────────
+    @Column(name = "uscis_online_account_number", length = 50)
+    private String uscisOnlineAccountNumber;
+
+    @Column(name = "preferred_language", length = 10)
+    private String preferredLanguage = "en";
 
     // ── JSON sub-fields (TEXT, H2+MySQL safe) ─────────────────────────────────
     // { line1, line2, city, state, zip, country }
