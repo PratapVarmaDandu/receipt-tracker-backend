@@ -7,9 +7,11 @@ import com.receipttracker.immigration.repository.ImmOrgRepository;
 import com.receipttracker.immigration.repository.OrgPartnershipRepository;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
+import com.receipttracker.service.EmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -25,10 +27,14 @@ public class OrgPartnershipService {
 
     private static final Logger log = LoggerFactory.getLogger(OrgPartnershipService.class);
 
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
+
     @Autowired private OrgPartnershipRepository partnershipRepo;
     @Autowired private ImmOrgRepository immOrgRepo;
     @Autowired private ImmOrgMemberRepository immOrgMemberRepo;
     @Autowired private UserRepository userRepo;
+    @Autowired private EmailService emailService;
 
     private User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -134,7 +140,14 @@ public class OrgPartnershipService {
         p.setInitiatedByUserId(caller.getId());
         OrgPartnership saved = partnershipRepo.save(p);
 
-        log.warn("IMM_EMPLOYER_INVITE lawFirmOrgId={} email={} token={}", req.lawFirmOrgId(), req.employerEmail(), token);
+        String lawFirmName = immOrgRepo.findById(req.lawFirmOrgId())
+                .map(ImmOrg::getName).orElse("Your immigration law firm");
+        String onboardUrl = frontendUrl + "/immigration/employer/onboard/" + token;
+        try {
+            emailService.sendImmPartnershipInvite(req.employerEmail(), lawFirmName, onboardUrl);
+        } catch (Exception e) {
+            log.warn("IMM_EMPLOYER_INVITE email failed lawFirmOrgId={} email={}: {}", req.lawFirmOrgId(), req.employerEmail(), e.getMessage());
+        }
         return enrichDTO(saved);
     }
 

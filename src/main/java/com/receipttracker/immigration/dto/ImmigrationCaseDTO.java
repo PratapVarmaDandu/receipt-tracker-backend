@@ -30,6 +30,11 @@ public record ImmigrationCaseDTO(
         String assignedAttorneyName,
         String assignedAttorneyEmail,
 
+        // Assigned paralegal within the law firm
+        Long assignedParalegalMemberId,
+        String assignedParalegalName,
+        String assignedParalegalEmail,
+
         // Beneficiary invite status
         boolean beneficiaryInvitePending,  // true = invite sent but not yet accepted
 

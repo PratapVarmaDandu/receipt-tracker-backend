@@ -36,6 +36,20 @@ public class MessageController {
         catch (RuntimeException e) { return handleError(e); }
     }
 
+    @PostMapping("/{channel}/mark-read")
+    public ResponseEntity<?> markRead(@PathVariable Long caseId, @PathVariable String channel) {
+        log.info("POST /api/immigration/cases/{}/messages/{}/mark-read", caseId, channel);
+        try { messageService.markRead(caseId, channel); return ResponseEntity.ok(Map.of()); }
+        catch (RuntimeException e) { return handleError(e); }
+    }
+
+    @GetMapping("/unread-counts")
+    public ResponseEntity<?> getUnreadCounts(@PathVariable Long caseId) {
+        log.info("GET /api/immigration/cases/{}/messages/unread-counts", caseId);
+        try { return ResponseEntity.ok(messageService.getUnreadCounts(caseId)); }
+        catch (RuntimeException e) { return handleError(e); }
+    }
+
     private ResponseEntity<?> handleError(RuntimeException e) {
         String msg = e.getMessage();
         if (msg != null && msg.startsWith("Access denied"))

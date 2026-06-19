@@ -6,6 +6,7 @@ import com.receipttracker.immigration.repository.GrantRepository;
 import com.receipttracker.immigration.repository.ImmigrationCaseRepository;
 import com.receipttracker.immigration.repository.MessageRepository;
 import com.receipttracker.immigration.repository.MessageThreadRepository;
+import com.receipttracker.immigration.repository.MessageThreadReadRepository;
 import com.receipttracker.immigration.repository.ImmOrgMemberRepository;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
@@ -18,7 +19,10 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,6 +32,7 @@ public class MessageService {
     private static final Logger log = LoggerFactory.getLogger(MessageService.class);
 
     @Autowired private MessageThreadRepository threadRepo;
+    @Autowired private MessageThreadReadRepository threadReadRepo;
     @Autowired private MessageRepository messageRepo;
     @Autowired private GrantRepository grantRepo;
     @Autowired private ImmigrationCaseRepository caseRepo;
@@ -90,6 +95,56 @@ public class MessageService {
         msg.setContent(content.trim());
 
         return toDTO(messageRepo.save(msg), channel);
+    }
+
+    @Transactional
+    public void markRead(Long caseId, String channelStr) {
+        User user = currentUser();
+        permissionService.requireAccess(user, caseId, GrantScope.MESSAGING);
+
+        MessageChannel channel = parseChannel(channelStr);
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+
+        MessageThread thread = threadRepo.findByImmigrationCaseAndChannel(c, channel).orElse(null);
+        if (thread == null) return;
+
+        MessageThreadRead read = threadReadRepo.findByUserIdAndThreadId(user.getId(), thread.getId())
+                .orElseGet(() -> {
+                    MessageThreadRead r = new MessageThreadRead();
+                    r.setUserId(user.getId());
+                    r.setThreadId(thread.getId());
+                    return r;
+                });
+        read.setLastReadAt(LocalDateTime.now());
+        threadReadRepo.save(read);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Long> getUnreadCounts(Long caseId) {
+        User user = currentUser();
+        permissionService.requireAccess(user, caseId, GrantScope.MESSAGING);
+
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+
+        Map<String, Long> counts = new HashMap<>();
+        for (MessageChannel channel : MessageChannel.values()) {
+            MessageThread thread = threadRepo.findByImmigrationCaseAndChannel(c, channel).orElse(null);
+            if (thread == null) { counts.put(channel.name(), 0L); continue; }
+            MessageThreadRead read = threadReadRepo.findByUserIdAndThreadId(user.getId(), thread.getId()).orElse(null);
+            long unread;
+            if (read == null) {
+                unread = messageRepo.findByThreadOrderByCreatedAtAsc(thread).size();
+            } else {
+                LocalDateTime lastRead = read.getLastReadAt();
+                unread = messageRepo.findByThreadOrderByCreatedAtAsc(thread).stream()
+                        .filter(m -> m.getCreatedAt().isAfter(lastRead))
+                        .count();
+            }
+            counts.put(channel.name(), unread);
+        }
+        return counts;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

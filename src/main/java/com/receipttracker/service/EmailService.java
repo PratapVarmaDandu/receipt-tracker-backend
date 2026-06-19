@@ -152,6 +152,47 @@ public class EmailService {
         send(to, subject, body);
     }
 
+    public void sendFormShareEmail(String to, String senderName, String formLabel,
+                                   String shareUrl, int expiryDays) {
+        String subject = escapeHtml(senderName) + " shared form data with you: " + escapeHtml(formLabel);
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:#0d6efd;padding:24px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.3rem'>📋 Form Data Shared With You</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p><strong>" + escapeHtml(senderName) + "</strong> has shared immigration form data "
+            + "(<strong>" + escapeHtml(formLabel) + "</strong>) with you for review.</p>"
+            + "<p style='text-align:center;margin:28px 0'>"
+            + "<a href='" + shareUrl + "' style='background:#0d6efd;color:#fff;padding:12px 28px;"
+            + "border-radius:8px;text-decoration:none;font-weight:600;display:inline-block'>"
+            + "View Form Data</a></p>"
+            + "<p style='color:#94a3b8;font-size:12px'>This link expires in " + expiryDays + " day"
+            + (expiryDays == 1 ? "" : "s") + ". For authorized review only — do not forward.</p>"
+            + "</div></div>";
+        send(to, subject, body);
+    }
+
+    public void sendImmPartnershipInvite(String to, String lawFirmName, String onboardUrl) {
+        String subject = escapeHtml(lawFirmName) + " invited you to join as an employer partner";
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:#0d6efd;padding:24px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.3rem'>⚖️ Immigration Partnership Invitation</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p><strong>" + escapeHtml(lawFirmName) + "</strong> has invited you to create an employer "
+            + "partnership so you can collaborate on employee visa cases together.</p>"
+            + "<p>Click the link below to complete your company profile and activate the partnership:</p>"
+            + "<p style='text-align:center;margin:28px 0'>"
+            + "<a href='" + onboardUrl + "' style='background:#0d6efd;color:#fff;padding:12px 28px;"
+            + "border-radius:8px;text-decoration:none;font-weight:600;display:inline-block'>"
+            + "Complete Employer Profile</a></p>"
+            + "<p style='color:#94a3b8;font-size:12px'>If you did not expect this email, you can ignore it.</p>"
+            + "</div></div>";
+        send(to, subject, body);
+    }
+
     public void sendSimpleEmail(String to, String subject, String plainText) {
         String html = "<div style='font-family:sans-serif;padding:16px'>"
             + "<pre style='white-space:pre-wrap;font-family:inherit'>"

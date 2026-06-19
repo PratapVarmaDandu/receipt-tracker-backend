@@ -1,7 +1,9 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.immigration.dto.CreateFormShareRequest;
 import com.receipttracker.immigration.dto.FormInstanceDTO;
 import com.receipttracker.immigration.service.FormInstanceService;
+import com.receipttracker.immigration.service.FormShareService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,7 @@ public class FormController {
     private static final Logger log = LoggerFactory.getLogger(FormController.class);
 
     @Autowired private FormInstanceService formService;
+    @Autowired private FormShareService formShareService;
 
     @GetMapping
     public ResponseEntity<?> list(@PathVariable Long caseId) {
@@ -62,6 +65,19 @@ public class FormController {
         log.info("PUT /api/immigration/cases/{}/forms/{}/status status={}", caseId, formId, status);
         try {
             return ResponseEntity.ok(formService.updateStatus(caseId, formId, status));
+        } catch (RuntimeException e) {
+            return handleError(e);
+        }
+    }
+
+    @PostMapping("/{formId}/share")
+    public ResponseEntity<?> shareForm(
+            @PathVariable Long caseId,
+            @PathVariable Long formId,
+            @RequestBody CreateFormShareRequest req) {
+        log.info("POST /api/immigration/cases/{}/forms/{}/share", caseId, formId);
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(formShareService.createShare(caseId, formId, req));
         } catch (RuntimeException e) {
             return handleError(e);
         }

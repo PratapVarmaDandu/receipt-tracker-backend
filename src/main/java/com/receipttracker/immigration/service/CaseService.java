@@ -313,6 +313,48 @@ public class CaseService {
         return toDTO(saved, caller);
     }
 
+    // ── Paralegal assignment ─────────────────────────────────────────────────
+
+    @Transactional
+    public ImmigrationCaseDTO assignParalegal(Long caseId, Long memberId) {
+        log.info(">>> assignParalegal() caseId={} memberId={}", caseId, memberId);
+        User caller = currentUser();
+        permissionService.requireAccess(caller, caseId, GrantScope.WRITE_CASE);
+
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+
+        // memberId == null means remove paralegal
+        if (memberId != null) {
+            ImmOrgMember member = immOrgMemberRepo.findById(memberId)
+                    .orElseThrow(() -> new RuntimeException("Member not found: " + memberId));
+            // Ensure the paralegal belongs to the same law firm as the case
+            if (c.getLawFirmImmOrgId() != null && !member.getImmOrgId().equals(c.getLawFirmImmOrgId())) {
+                throw new RuntimeException("Member does not belong to the law firm for this case");
+            }
+            // Grant PARALEGAL scope if not already granted
+            if (member.getUserId() != null) {
+                User paralegalUser = userRepo.findById(member.getUserId()).orElse(null);
+                if (paralegalUser != null) {
+                    boolean alreadyGranted = grantRepo.findByImmigrationCaseAndRevokedAtIsNull(c).stream()
+                            .anyMatch(g -> g.getSubjectUser() != null
+                                    && g.getSubjectUser().getId().equals(paralegalUser.getId())
+                                    && g.getRelationship() == CaseRelationship.PARALEGAL);
+                    if (!alreadyGranted) {
+                        grantAllScopes(c, paralegalUser, CaseRelationship.PARALEGAL, caller);
+                    }
+                }
+            }
+        }
+
+        c.setAssignedParalegalMemberId(memberId);
+        ImmigrationCase saved = caseRepo.save(c);
+        auditService.append(saved, caller, "PARALEGAL_ASSIGNED",
+                "{\"memberId\":" + memberId + "}", FeedVisibility.ATTORNEY_ONLY);
+        log.info("<<< assignParalegal() caseId={} memberId={}", caseId, memberId);
+        return toDTO(saved, caller);
+    }
+
     // ── Grant helpers ────────────────────────────────────────────────────────
 
     @Transactional
@@ -338,10 +380,12 @@ public class CaseService {
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     ImmigrationCaseDTO toDTO(ImmigrationCase c, User caller) {
-        String employerName   = orgName(c.getEmployerImmOrgId());
-        String lawFirmName    = orgName(c.getLawFirmImmOrgId());
-        String attorneyName   = attorneyName(c.getAssignedAttorneyMemberId());
-        String attorneyEmail  = attorneyEmail(c.getAssignedAttorneyMemberId());
+        String employerName    = orgName(c.getEmployerImmOrgId());
+        String lawFirmName     = orgName(c.getLawFirmImmOrgId());
+        String attorneyName    = attorneyName(c.getAssignedAttorneyMemberId());
+        String attorneyEmail   = attorneyEmail(c.getAssignedAttorneyMemberId());
+        String paralegalName   = attorneyName(c.getAssignedParalegalMemberId());
+        String paralegalEmail  = attorneyEmail(c.getAssignedParalegalMemberId());
 
         return new ImmigrationCaseDTO(
                 c.getId(),
@@ -361,6 +405,9 @@ public class CaseService {
                 c.getAssignedAttorneyMemberId(),
                 attorneyName,
                 attorneyEmail,
+                c.getAssignedParalegalMemberId(),
+                paralegalName,
+                paralegalEmail,
                 c.getBeneficiaryInviteToken() != null,
                 c.getCreatedBy().getId(),
                 c.getCreatedAt(),
@@ -382,6 +429,7 @@ public class CaseService {
                 null, null,
                 c.getParentCaseId(),
                 c.isI140Approved(), null,
+                null, null, null,
                 null, null, null,
                 true,
                 null, null, null,

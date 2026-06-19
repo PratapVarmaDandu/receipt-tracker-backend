@@ -142,6 +142,26 @@ public class CaseController {
         }
     }
 
+    /** Assign a paralegal (ImmOrgMember) to the case. Caller must have WRITE_CASE grant. */
+    @PostMapping("/{id}/assign-paralegal")
+    public ResponseEntity<?> assignParalegal(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> body) {
+        Long memberId = body.get("memberId");  // null = remove paralegal
+        log.info("POST /api/immigration/cases/{}/assign-paralegal memberId={}", id, memberId);
+        try {
+            ImmigrationCaseDTO dto = caseService.assignParalegal(id, memberId);
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            log.error("!!! assignParalegal failed: {}", msg);
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
     /**
      * Public — no auth required.
      * Returns minimal case info for the beneficiary invite page (employer name, case type, law firm).

@@ -65,6 +65,10 @@ public class ImmigrationCase {
     @Column(name = "assigned_attorney_member_id")
     private Long assignedAttorneyMemberId;
 
+    // Which ImmOrgMember (paralegal) within the law firm is assisting this case
+    @Column(name = "assigned_paralegal_member_id")
+    private Long assignedParalegalMemberId;
+
     // Beneficiary invite — set when an org member creates a case for an employee
     @Column(name = "beneficiary_invite_token", unique = true)
     private String beneficiaryInviteToken;
