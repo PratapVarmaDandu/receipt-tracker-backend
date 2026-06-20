@@ -45,8 +45,7 @@ public class PermissionService {
     @Transactional(readOnly = true)
     public void requireAccess(User user, Long caseId, GrantScope scope) {
         if (!canAccess(user, caseId, scope)) {
-            throw new RuntimeException(
-                "Access denied: user " + user.getId() + " does not have " + scope + " on case " + caseId);
+            throw new RuntimeException("Access denied: insufficient permissions");
         }
     }
 

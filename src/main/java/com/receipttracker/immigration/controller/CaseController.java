@@ -3,6 +3,7 @@ package com.receipttracker.immigration.controller;
 import com.receipttracker.immigration.dto.CanonicalProfileDTO;
 import com.receipttracker.immigration.dto.CloneCaseRequest;
 import com.receipttracker.immigration.dto.ConflictCheckRequest;
+import com.receipttracker.immigration.dto.ConflictSummaryDTO;
 import com.receipttracker.immigration.dto.CreateCaseRequest;
 import com.receipttracker.immigration.dto.FamilyBundleDTO;
 import com.receipttracker.immigration.dto.ImmigrationCaseDTO;
@@ -204,9 +205,9 @@ public class CaseController {
     /** Conflict-of-interest check before opening a new case (ATTORNEY/OWNER in a law firm). */
     @PostMapping("/conflict-check")
     public ResponseEntity<?> conflictCheck(@RequestBody ConflictCheckRequest req) {
-        log.info("POST /api/immigration/cases/conflict-check email={}", req.beneficiaryEmail());
+        log.info("POST /api/immigration/cases/conflict-check");
         try {
-            List<ImmigrationCaseDTO> conflicts = caseService.checkConflict(req);
+            List<ConflictSummaryDTO> conflicts = caseService.checkConflict(req);
             return ResponseEntity.ok(conflicts);
         } catch (RuntimeException e) {
             String msg = e.getMessage();

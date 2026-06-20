@@ -2,6 +2,7 @@ package com.receipttracker.immigration.service;
 
 import com.receipttracker.immigration.dto.CloneCaseRequest;
 import com.receipttracker.immigration.dto.ConflictCheckRequest;
+import com.receipttracker.immigration.dto.ConflictSummaryDTO;
 import com.receipttracker.immigration.dto.CreateCaseRequest;
 import com.receipttracker.immigration.dto.FamilyBundleDTO;
 import com.receipttracker.immigration.dto.ImmigrationCaseDTO;
@@ -34,6 +35,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CaseService {
 
     private static final Logger log = LoggerFactory.getLogger(CaseService.class);
+
+    private static final GrantScope[] BENEFICIARY_SCOPES = {
+        GrantScope.READ_CASE, GrantScope.WRITE_DOCS, GrantScope.MESSAGING
+    };
+
+    // APPROVE_FORMS excluded — that is ATTORNEY + OWNER only
+    private static final GrantScope[] PARALEGAL_SCOPES = {
+        GrantScope.READ_CASE, GrantScope.WRITE_CASE,
+        GrantScope.READ_DOCS, GrantScope.WRITE_DOCS,
+        GrantScope.READ_FORMS, GrantScope.WRITE_FORMS,
+        GrantScope.MESSAGING, GrantScope.MANAGE_CHECKLISTS, GrantScope.MANAGE_TASKS
+    };
 
     @Autowired private ImmigrationCaseRepository caseRepo;
     @Autowired private BeneficiaryRepository beneficiaryRepo;
@@ -161,8 +174,8 @@ public class CaseService {
 
         ImmigrationCase saved = caseRepo.save(c);
 
-        // Grant beneficiary all scopes
-        grantAllScopes(saved, beneficiaryUser, CaseRelationship.BENEFICIARY, caller);
+        // Grant beneficiary restricted scopes (READ_CASE, WRITE_DOCS, MESSAGING only)
+        grantScopes(saved, beneficiaryUser, CaseRelationship.BENEFICIARY, caller, BENEFICIARY_SCOPES);
 
         // Grant employer org: read case + docs + messaging
         if (employerOrg != null) {
@@ -215,6 +228,7 @@ public class CaseService {
 
         ImmigrationCase c = caseRepo.findById(caseId)
                 .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        requireAttorneyInFirm(user, c);
 
         CaseStatus newStatus;
         try {
@@ -339,13 +353,14 @@ public class CaseService {
 
         ImmigrationCase c = caseRepo.findById(caseId)
                 .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        requireAttorneyInFirm(caller, c);
 
         // memberId == null means remove paralegal
         if (memberId != null) {
             ImmOrgMember member = immOrgMemberRepo.findById(memberId)
                     .orElseThrow(() -> new RuntimeException("Member not found: " + memberId));
             // Ensure the paralegal belongs to the same law firm as the case
-            if (c.getLawFirmImmOrgId() != null && !member.getImmOrgId().equals(c.getLawFirmImmOrgId())) {
+            if (!member.getImmOrgId().equals(c.getLawFirmImmOrgId())) {
                 throw new RuntimeException("Member does not belong to the law firm for this case");
             }
             // Grant PARALEGAL scope if not already granted
@@ -357,7 +372,7 @@ public class CaseService {
                                     && g.getSubjectUser().getId().equals(paralegalUser.getId())
                                     && g.getRelationship() == CaseRelationship.PARALEGAL);
                     if (!alreadyGranted) {
-                        grantAllScopes(c, paralegalUser, CaseRelationship.PARALEGAL, caller);
+                        grantScopes(c, paralegalUser, CaseRelationship.PARALEGAL, caller, PARALEGAL_SCOPES);
                     }
                 }
             }
@@ -394,6 +409,7 @@ public class CaseService {
 
         ImmigrationCase src = caseRepo.findById(sourceId)
                 .orElseThrow(() -> new RuntimeException("Case not found: " + sourceId));
+        requireAttorneyInFirm(caller, src);
 
         CaseType newCaseType;
         try {
@@ -439,8 +455,8 @@ public class CaseService {
     // ── Conflict check (FEAT-QW5) ────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ImmigrationCaseDTO> checkConflict(ConflictCheckRequest req) {
-        log.info(">>> checkConflict() email={}", req.beneficiaryEmail());
+    public List<ConflictSummaryDTO> checkConflict(ConflictCheckRequest req) {
+        log.info(">>> checkConflict() email=***");
         User caller = currentUser();
 
         // Require ATTORNEY or OWNER role in a LAW_FIRM org
@@ -473,7 +489,12 @@ public class CaseService {
                     return emailMatch || orgMatch;
                 })
                 .filter(c -> seen.add(c.getId()))
-                .map(c -> toDTO(c, caller))
+                .map(c -> new ConflictSummaryDTO(
+                        c.getId(),
+                        c.getCaseNumber(),
+                        c.getCaseType() != null ? c.getCaseType().name() : null,
+                        c.getStatus() != null ? c.getStatus().name() : null,
+                        c.getCreatedAt()))
                 .collect(Collectors.toList());
     }
 
@@ -600,6 +621,9 @@ public class CaseService {
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private User findOrCreateStubUser(String email) {
+        if (email.length() > 254) {
+            throw new RuntimeException("Beneficiary email address is too long (max 254 characters)");
+        }
         return userRepo.findByEmail(email).orElseGet(() -> {
             User stub = new User();
             stub.setEmail(email);
@@ -667,11 +691,22 @@ public class CaseService {
                 .distinct()
                 .toList();
 
-        if (matches.contains(CaseRelationship.ATTORNEY) || matches.contains(CaseRelationship.PARALEGAL)) return "ATTORNEY";
+        if (matches.contains(CaseRelationship.ATTORNEY)) return "ATTORNEY";
+        if (matches.contains(CaseRelationship.PARALEGAL)) return "PARALEGAL";
         if (matches.contains(CaseRelationship.HR_ADMIN)) return "HR_ADMIN";
         if (matches.contains(CaseRelationship.BENEFICIARY)) return "BENEFICIARY";
         if (!matches.isEmpty()) return "VIEWER";
         return null;
+    }
+
+    private void requireAttorneyInFirm(User caller, ImmigrationCase c) {
+        if (c.getLawFirmImmOrgId() == null)
+            throw new RuntimeException("Access denied: no law firm assigned to this case");
+        boolean ok = immOrgMemberRepo.findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream()
+                .anyMatch(m -> m.getImmOrgId().equals(c.getLawFirmImmOrgId())
+                        && (m.getRole() == ImmOrgMemberRole.ATTORNEY || m.getRole() == ImmOrgMemberRole.OWNER));
+        if (!ok) throw new RuntimeException("Access denied: ATTORNEY role in law firm required");
     }
 
     private void requireOrgMember(User user, Long orgId) {
@@ -683,8 +718,8 @@ public class CaseService {
         }
     }
 
-    private void grantAllScopes(ImmigrationCase c, User subject, CaseRelationship relationship, User grantedBy) {
-        for (GrantScope scope : GrantScope.values()) {
+    private void grantScopes(ImmigrationCase c, User subject, CaseRelationship relationship, User grantedBy, GrantScope... scopes) {
+        for (GrantScope scope : scopes) {
             Grant g = new Grant();
             g.setImmigrationCase(c);
             g.setSubjectUser(subject);

@@ -3,7 +3,7 @@
 ## Package layout
 ```
 com.receipttracker
-├── config/       CorsConfig
+├── config/       CorsConfig, GlobalExceptionHandler, RateLimitFilter, LocalDevSecurityFilter
 ├── controller/   HTTP layer only — validates input, delegates to service
 ├── dto/          Request/response shapes (manually mapped, no MapStruct)
 ├── model/        JPA entities
@@ -205,14 +205,16 @@ before calling `tess.doOCR()` — missing tessdata causes a native SIGSEGV that 
 
 ## Security / auth
 - Google OAuth2 → Spring Security session (JSESSIONID), not JWT
-- Profile `local`: all `/api/**` endpoints open (no auth gate) — safe for H2 dev
+- Profile `local`: all `/api/**` endpoints open (no auth gate) — safe for H2 dev; H2 console at `/h2-console`
 - Profile `local-mysql`: same auth bypass as `local` via `LocalDevSecurityFilter`; uses MySQL
-- Profile `prod`/`test`: all `/api/**` requires authenticated session
+- Profile `prod`/`test`: all `/api/**` requires authenticated session; H2 console disabled (`spring.h2.console.enabled=false`)
 - `LocalDevSecurityFilter` (`@Profile({"local","local-mysql"})`, `@Order(HIGHEST_PRECEDENCE)`):
   auto-injects mock OAuth2 principal (googleId=`local-dev-user`, email=`dev@localhost.local`)
   so the frontend never shows the login page during local dev
 - CORS: allows `http://localhost:4200` and `${FRONTEND_URL}` with `allowCredentials=true`
 - Cookie: `SameSite=None; Secure` in prod; `SameSite=Lax` locally
+- Security response headers (prod/test only, set in `SecurityConfig`): `Content-Security-Policy: default-src 'none'`; `X-Frame-Options: DENY`; `Permissions-Policy: geolocation=(), camera=(), microphone=()`
+- `GlobalExceptionHandler` (`config/GlobalExceptionHandler.java`): catches `DataIntegrityViolationException` → 409 with safe message; catches `MethodArgumentTypeMismatchException` → 400 `{"error": "Invalid value for parameter '{name}'"}`  (no Java class names exposed)
 
 ## Key env vars
 | Env var | Default | Notes |
@@ -239,6 +241,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - `requireAccess(user, caseId, GrantScope)` — call as the FIRST line of every service method that touches case data; no exception, no bypass
 - Checks active (non-revoked) `Grant` for (user directly) OR (any org the user is an active member of)
 - Scopes: `READ_CASE`, `WRITE_CASE`, `READ_FORMS`, `WRITE_FORMS`, `READ_DOCUMENTS`, `WRITE_DOCUMENTS`, `MESSAGING`
+- Access-denied throws `"Access denied: insufficient permissions"` — user ID and scope are logged server-side (WARN) but never included in the response
 
 **Grant model** — `imm_grants`: exactly one of `subjectUser`/`subjectOrg` non-null (enforced in service); `relationship` enum (BENEFICIARY, ATTORNEY, PARALEGAL, HR_ADMIN, EMPLOYER_REP); `revokedAt` null means active
 
@@ -248,7 +251,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 
 **Activity feed** — `ActivityFeedService.getFeed()` filters events by `FeedVisibility`: ALL visible to any grantee; ATTORNEY_ONLY to ATTORNEY/PARALEGAL; BENEFICIARY_ONLY to BENEFICIARY.
 
-**Consent** — `ConsentRecord` is permanent log; `ConsentService.revokeConsent()` side-effect: revokes all active `Grant` rows for that relationship; beneficiary-only write path.
+**Consent** — `ConsentRecord` is permanent log; `ConsentService.revokeConsent()` side-effect: revokes all active `Grant` rows for that relationship; beneficiary-only write path. `parseRelationship()` validates null/blank before `Enum.valueOf()` — returns `"relationship is required"` (not an NPE) when body omits the field.
 
 **Messaging** — channel isolation in `MessageService.requireChannelAccess()`: SHARED=open (any grantee); ATTORNEY_BENEFICIARY=ATTORNEY/PARALEGAL/BENEFICIARY only; ATTORNEY_EMPLOYER=ATTORNEY/PARALEGAL/HR_ADMIN only.
 
@@ -267,6 +270,8 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 **Case types** (`CaseType` enum) — H1B family: `H1B_INITIAL`, `H1B_EXTENSION`, `H1B_TRANSFER`, `H1B_AMENDMENT`; H-4 dependents: `H4`, `H4_EAD`; green card pathway: `PERM`, `I140_EB2`, `I140_EB3`, `I485`, `GC_EAD`, `GC_RENEWAL`; citizenship: `NATURALIZATION`; other: `CONSULAR`
 
 **`ImmOrgDTO`** — includes `myMemberId: Long` (the current caller's `ImmOrgMember.id` within that org, populated only by `listMine()`; null on all other DTO calls). Used by the frontend to auto-assign the attorney to themselves when creating a case.
+
+**`ImmOrgMemberDTO`** — `inviteToken` is always `null` in every API response; the token is delivered only by email and is never echoed back. Internal token lookups use the repository directly.
 
 **`ImmigrationCaseDTO`** — includes `assignedAttorneyEmail: String` (the attorney member's `ImmOrgMember.email`; populated from `ImmOrgMemberRepository` at DTO build time). Populated alongside `assignedAttorneyName`.
 
@@ -292,6 +297,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - `GET  /api/immigration/cases/{id}` — detail (403 if no grant)
 - `PUT  /api/immigration/cases/{id}/status` — transition status (state machine validates; auto-sets `i140Approved` on I140 cases)
 - `GET  /api/immigration/cases/{id}/beneficiary/profile` — returns beneficiary's `CanonicalProfile`; requires READ_CASE grant (attorney / HR admin); calls `CanonicalProfileService.getForCase()`
+- `POST /api/immigration/cases/conflict-check` — ATTORNEY/OWNER in a law firm; body `{ beneficiaryEmail?, employerOrgId? }`; returns `List<ConflictSummaryDTO>` (id, caseNumber, caseType, status, createdAt) — no beneficiary PII or attorney assignments
 - `GET  /api/immigration/cases/join/{token}` — public; minimal case info for invite page
 - `POST /api/immigration/cases/join/{token}` — auth required; beneficiary accepts invite; email-match validated
 - `GET  /api/immigration/profile/me` — own canonical profile
@@ -339,6 +345,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - `create()`: WRITE_CASE + `requireAttorneyInFirm()`; default deadline = issuedDate + 87 days; upserts `PETITION_DEADLINE` `KeyDate` (find-or-create to prevent duplicates)
 - `update()`: null fields not applied (patch semantics); `respond()`: throws if already `RESPONDED`; sets `respondedAt = now()`
 - `CaseRfeDTO.daysUntilDeadline` computed via `ChronoUnit.DAYS.between(today, responseDeadline)`
+- **Validation** (both create and update): `responseDeadline` must not be before today (rejects past dates); `uscisCategory` ≤ 500 chars; `uscisNote` ≤ 2000 chars
 - Routes (all under `/api/immigration/cases/{caseId}/rfe`):
   - `GET  /` — list RFEs for case (READ_CASE)
   - `POST /` — create RFE (WRITE_CASE + attorney only)
@@ -365,7 +372,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
   - `POST /api/immigration/data-requests/{token}/submit` — auth required; validates `targetRelationship == BENEFICIARY → caller.email == case.beneficiaryEmail`; calls `CanonicalProfileService.updateForBeneficiary()` (package-private); sets status `SUBMITTED`
 - `applySubmittedSections()` in service uses `ObjectMapper.convertValue(mergedMap, UpdateProfileRequest.class)` to reuse all existing encryption + persistence logic
 - `CanonicalProfileService.updateForBeneficiary(Beneficiary, UpdateProfileRequest)` — package-private method (same package as `ProfileDataRequestService`); upserts profile; no public exposure needed
-- `DataRequestPublicDTO`: id, caseNumber, beneficiaryName, beneficiaryEmail, targetRelationship, sections, status, expiresAt, prefillData (CanonicalProfileDTO or null)
+- `DataRequestPublicDTO`: id, caseNumber, beneficiaryName, targetRelationship, sections, status, expiresAt, prefillData (CanonicalProfileDTO or null) — `beneficiaryEmail` is intentionally omitted (public endpoint, token could be forwarded)
 - Email is non-fatal: caught and logged WARN if `EmailService` is not configured
 
 **FEAT-M8 — Evidence checklist** (`ChecklistService`, `ChecklistController`, `ChecklistTemplateSeeder`):

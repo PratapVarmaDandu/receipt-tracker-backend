@@ -76,6 +76,17 @@ public class FilingPackageService {
         if (req.selectedFormTypes() == null || req.selectedFormTypes().isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one form type is required");
 
+        for (String ft : req.selectedFormTypes()) {
+            try {
+                FormType.valueOf(ft);
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Invalid form type: '" + ft + "'. Must be one of: "
+                        + Arrays.stream(FormType.values()).map(Enum::name)
+                                .collect(Collectors.joining(", ")));
+            }
+        }
+
         ImmigrationCase immCase = caseRepo.findById(caseId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Case not found"));
 
@@ -517,6 +528,8 @@ public class FilingPackageService {
 
     // ── Approve answers ───────────────────────────────────────────────────────
 
+    private static final Set<String> APPROVABLE_STATUSES = Set.of("ANSWERS_COLLECTED", "ATTORNEY_REVIEW");
+
     @Transactional
     public FilingPackageDTO approveAnswers(Long caseId, Long packageId) {
         User caller = currentUser();
@@ -524,6 +537,12 @@ public class FilingPackageService {
 
         FilingPackage pkg = packageRepo.findByIdAndCaseId(packageId, caseId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package not found"));
+
+        if (!APPROVABLE_STATUSES.contains(pkg.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Package cannot be approved from status '" + pkg.getStatus()
+                    + "'. Required: ANSWERS_COLLECTED or ATTORNEY_REVIEW.");
+        }
 
         pkg.setStatus("APPROVED");
         pkg.setApprovedByUserId(caller.getId());

@@ -12,7 +12,6 @@ public record DataRequestPublicDTO(
         Long id,
         String caseNumber,
         String beneficiaryName,
-        String beneficiaryEmail,
         String targetRelationship,
         List<String> sections,
         String status,

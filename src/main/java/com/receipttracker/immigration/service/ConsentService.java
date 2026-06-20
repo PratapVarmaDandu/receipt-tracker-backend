@@ -117,6 +117,7 @@ public class ConsentService {
     }
 
     private CaseRelationship parseRelationship(String s) {
+        if (s == null || s.isBlank()) throw new RuntimeException("relationship is required");
         try { return CaseRelationship.valueOf(s); }
         catch (IllegalArgumentException e) { throw new RuntimeException("Unknown relationship: " + s); }
     }

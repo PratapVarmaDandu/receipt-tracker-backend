@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -43,6 +44,8 @@ public class ImmOrgService {
     public ImmOrgDTO create(CreateImmOrgRequest req) {
         log.info(">>> create() name={} orgType={}", req.name(), req.orgType());
         User user = currentUser();
+
+        rejectHtml("name", req.name());
 
         ImmOrgType orgType;
         try {
@@ -103,10 +106,24 @@ public class ImmOrgService {
                 .orElseThrow(() -> new RuntimeException("Org not found: " + id));
     }
 
+    private static final Set<ImmOrgMemberRole> INVITABLE_ROLES =
+            Set.of(ImmOrgMemberRole.ATTORNEY, ImmOrgMemberRole.PARALEGAL, ImmOrgMemberRole.CASE_VIEWER);
+
     @Transactional
     public ImmOrgMemberDTO inviteMember(Long orgId, InviteMemberRequest req) {
         User caller = currentUser();
         requireOwner(caller, orgId);
+
+        ImmOrgMemberRole assignedRole;
+        try {
+            assignedRole = ImmOrgMemberRole.valueOf(req.role() != null ? req.role().trim() : "");
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid role '" + req.role()
+                    + "'. Must be one of: ATTORNEY, PARALEGAL, CASE_VIEWER");
+        }
+        if (!INVITABLE_ROLES.contains(assignedRole)) {
+            throw new RuntimeException("Role must be one of: ATTORNEY, PARALEGAL, CASE_VIEWER");
+        }
 
         // Idempotent: if already a member, return existing
         var existing = immOrgMemberRepo.findByEmailAndImmOrgId(req.email(), orgId);
@@ -118,12 +135,12 @@ public class ImmOrgService {
         ImmOrgMember member = new ImmOrgMember();
         member.setImmOrgId(orgId);
         member.setEmail(req.email());
-        member.setRole(ImmOrgMemberRole.MEMBER);
+        member.setRole(assignedRole);
         member.setStatus(ImmOrgMemberStatus.PENDING);
         member.setInviteToken(token);
         ImmOrgMember saved = immOrgMemberRepo.save(member);
 
-        log.warn("IMM_ORG_INVITE orgId={} email={} token={}", orgId, req.email(), token);
+        log.warn("IMM_ORG_INVITE orgId={} email={} role={} token={}", orgId, req.email(), assignedRole, token);
         return toMemberDTO(saved);
     }
 
@@ -200,6 +217,12 @@ public class ImmOrgService {
 
     private ImmOrgMemberDTO toMemberDTO(ImmOrgMember m) {
         return new ImmOrgMemberDTO(m.getId(), m.getImmOrgId(), m.getUserId(),
-                m.getEmail(), m.getRole().name(), m.getStatus().name(), m.getInviteToken());
+                m.getEmail(), m.getRole().name(), m.getStatus().name(), null);
+    }
+
+    private static void rejectHtml(String fieldName, String value) {
+        if (value != null && (value.contains("<") || value.contains(">"))) {
+            throw new RuntimeException(fieldName + " must not contain HTML characters");
+        }
     }
 }

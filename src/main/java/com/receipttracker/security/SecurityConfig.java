@@ -1,6 +1,7 @@
 package com.receipttracker.security;
 
 import com.receipttracker.config.LocalDevSecurityFilter;
+import com.receipttracker.config.RateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,6 +66,16 @@ public class SecurityConfig {
                 http.addFilterAfter(localDevSecurityFilter, SecurityContextHolderFilter.class);
             }
         } else {
+            // Rate limiting runs before auth checks in prod/test
+            http.addFilterBefore(rateLimitFilter(), SecurityContextHolderFilter.class);
+
+            // Security response headers (API-only backend — no inline scripts or frames needed)
+            http.headers(headers -> headers
+                .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'none'"))
+                .frameOptions(frame -> frame.deny())
+                .permissionsPolicy(pp -> pp.policy("geolocation=(), camera=(), microphone=()"))
+            );
+
             // PRODUCTION/TEST: Require authentication for API endpoints
             http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/error").permitAll()
@@ -120,6 +131,21 @@ public class SecurityConfig {
     @ConditionalOnBean(LocalDevSecurityFilter.class)
     public FilterRegistrationBean<LocalDevSecurityFilter> localDevFilterRegistration(LocalDevSecurityFilter filter) {
         FilterRegistrationBean<LocalDevSecurityFilter> reg = new FilterRegistrationBean<>();
+        reg.setFilter(filter);
+        reg.setEnabled(false);
+        return reg;
+    }
+
+    // Spring-managed so @Scheduled eviction runs; disabled from auto-registration
+    // because it is inserted into the security chain manually (prod/test only).
+    @Bean
+    public RateLimitFilter rateLimitFilter() {
+        return new RateLimitFilter();
+    }
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter filter) {
+        FilterRegistrationBean<RateLimitFilter> reg = new FilterRegistrationBean<>();
         reg.setFilter(filter);
         reg.setEnabled(false);
         return reg;

@@ -28,6 +28,7 @@ public class ProfileDataRequestService {
 
     @Autowired private ProfileDataRequestRepository repo;
     @Autowired private ImmigrationCaseRepository caseRepo;
+    @Autowired private ImmOrgMemberRepository immOrgMemberRepo;
     @Autowired private CanonicalProfileRepository profileRepo;
     @Autowired private BeneficiaryRepository beneficiaryRepo;
     @Autowired private UserRepository userRepo;
@@ -38,6 +39,18 @@ public class ProfileDataRequestService {
 
     @Value("${app.frontend.url:http://localhost:4200}")
     private String frontendUrl;
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private void requireAttorneyInFirm(User caller, ImmigrationCase c) {
+        if (c.getLawFirmImmOrgId() == null)
+            throw new RuntimeException("Access denied: no law firm assigned to this case");
+        boolean ok = immOrgMemberRepo.findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream()
+                .anyMatch(m -> m.getImmOrgId().equals(c.getLawFirmImmOrgId())
+                        && (m.getRole() == ImmOrgMemberRole.ATTORNEY || m.getRole() == ImmOrgMemberRole.OWNER));
+        if (!ok) throw new RuntimeException("Access denied: ATTORNEY role in law firm required");
+    }
 
     // ── User resolution ──────────────────────────────────────────────────────
 
@@ -70,6 +83,7 @@ public class ProfileDataRequestService {
 
         ImmigrationCase c = caseRepo.findById(caseId)
                 .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        requireAttorneyInFirm(caller, c);
 
         int days = req.expiryDays() > 0 ? req.expiryDays() : 7;
 
@@ -109,7 +123,6 @@ public class ProfileDataRequestService {
 
         Beneficiary beneficiary = c.getBeneficiary();
         String beneficiaryName = beneficiary.getUser().getName();
-        String beneficiaryEmail = beneficiary.getUser().getEmail();
 
         CanonicalProfileDTO prefill = null;
         if ("BENEFICIARY".equals(pdr.getTargetRelationship())) {
@@ -125,7 +138,7 @@ public class ProfileDataRequestService {
         }
 
         return new DataRequestPublicDTO(
-                pdr.getId(), c.getCaseNumber(), beneficiaryName, beneficiaryEmail,
+                pdr.getId(), c.getCaseNumber(), beneficiaryName,
                 pdr.getTargetRelationship(), fromJson(pdr.getSectionsRequested()),
                 pdr.getStatus(), pdr.getExpiresAt(), prefill
         );

@@ -41,6 +41,11 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         boolean isNew = user.getId() == null;
         boolean wasStub = !isNew && user.getGoogleId() != null && user.getGoogleId().startsWith("PENDING_");
 
+        if (email != null && email.length() > 254) {
+            log.warn("OAuth email exceeds 254 chars — login rejected for googleId={}", googleId);
+            throw new OAuth2AuthenticationException("email_too_long");
+        }
+
         user.setGoogleId(googleId);
         user.setEmail(email);
         user.setName(name);

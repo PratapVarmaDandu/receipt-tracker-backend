@@ -59,6 +59,9 @@ public class CaseRfeService {
         requireAttorneyInFirm(caller, caseId);
 
         if (req.issuedDate() == null) throw new RuntimeException("issuedDate is required");
+        rejectHtml("uscisCategory", req.uscisCategory());
+        rejectHtml("uscisNote", req.uscisNote());
+        validateTextLengths(req.uscisCategory(), req.uscisNote());
 
         ImmigrationCase c = requireCase(caseId);
 
@@ -68,6 +71,8 @@ public class CaseRfeService {
         LocalDate deadline = req.responseDeadline() != null
                 ? req.responseDeadline()
                 : req.issuedDate().plusDays(87);
+        if (deadline.isBefore(LocalDate.now()))
+            throw new RuntimeException("responseDeadline must not be in the past");
         rfe.setResponseDeadline(deadline);
         rfe.setUscisCategory(req.uscisCategory());
         rfe.setUscisNote(req.uscisNote());
@@ -99,9 +104,17 @@ public class CaseRfeService {
         permissionService.requireAccess(caller, caseId, GrantScope.WRITE_CASE);
         requireAttorneyInFirm(caller, caseId);
 
+        rejectHtml("uscisCategory", req.uscisCategory());
+        rejectHtml("uscisNote", req.uscisNote());
+        validateTextLengths(req.uscisCategory(), req.uscisNote());
+
         CaseRfe rfe = requireRfe(caseId, rfeId);
         if (req.issuedDate() != null) rfe.setIssuedDate(req.issuedDate());
-        if (req.responseDeadline() != null) rfe.setResponseDeadline(req.responseDeadline());
+        if (req.responseDeadline() != null) {
+            if (req.responseDeadline().isBefore(LocalDate.now()))
+                throw new RuntimeException("responseDeadline must not be in the past");
+            rfe.setResponseDeadline(req.responseDeadline());
+        }
         if (req.uscisCategory() != null) rfe.setUscisCategory(req.uscisCategory());
         if (req.uscisNote() != null) rfe.setUscisNote(req.uscisNote());
         if (req.status() != null) rfe.setStatus(req.status());
@@ -128,7 +141,8 @@ public class CaseRfeService {
 
     private void requireAttorneyInFirm(User caller, Long caseId) {
         ImmigrationCase c = requireCase(caseId);
-        if (c.getLawFirmImmOrgId() == null) return;
+        if (c.getLawFirmImmOrgId() == null)
+            throw new RuntimeException("Access denied: no law firm assigned to this case");
         boolean ok = memberRepo.findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE)
                 .stream()
                 .anyMatch(m -> m.getImmOrgId().equals(c.getLawFirmImmOrgId())
@@ -164,5 +178,18 @@ public class CaseRfeService {
                 rfe.getCreatedAt(),
                 daysUntil
         );
+    }
+
+    private static void rejectHtml(String fieldName, String value) {
+        if (value != null && (value.contains("<") || value.contains(">"))) {
+            throw new RuntimeException(fieldName + " must not contain HTML characters");
+        }
+    }
+
+    private static void validateTextLengths(String uscisCategory, String uscisNote) {
+        if (uscisCategory != null && uscisCategory.length() > 500)
+            throw new RuntimeException("uscisCategory must not exceed 500 characters");
+        if (uscisNote != null && uscisNote.length() > 2000)
+            throw new RuntimeException("uscisNote must not exceed 2000 characters");
     }
 }
