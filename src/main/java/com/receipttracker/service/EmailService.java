@@ -193,6 +193,29 @@ public class EmailService {
         send(to, subject, body);
     }
 
+    public void sendKeyDateReminderEmail(String to, String caseName, String keyDateLabel,
+                                          long daysUntil, String caseUrl) {
+        String urgencyColor = daysUntil <= 7 ? "#dc2626" : daysUntil <= 30 ? "#d97706" : "#2563eb";
+        String daysText = daysUntil <= 0 ? "TODAY" : daysUntil + " day" + (daysUntil == 1 ? "" : "s");
+        String subject = "Reminder: " + escapeHtml(keyDateLabel) + " — " + daysText + " — " + escapeHtml(caseName);
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:" + urgencyColor + ";padding:20px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.2rem'>⏰ Immigration Deadline Reminder</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p style='font-size:1rem'><strong>" + escapeHtml(keyDateLabel) + "</strong> for case "
+            + "<strong>" + escapeHtml(caseName) + "</strong> is due in <strong style='color:" + urgencyColor + "'>"
+            + daysText + "</strong>.</p>"
+            + "<p style='text-align:center;margin:28px 0'>"
+            + "<a href='" + caseUrl + "' style='background:" + urgencyColor + ";color:#fff;padding:12px 28px;"
+            + "border-radius:8px;text-decoration:none;font-weight:600;display:inline-block'>"
+            + "View Case</a></p>"
+            + "<p style='color:#94a3b8;font-size:12px'>This is an automated reminder from your immigration case tracker.</p>"
+            + "</div></div>";
+        send(to, subject, body);
+    }
+
     public void sendSimpleEmail(String to, String subject, String plainText) {
         String html = "<div style='font-family:sans-serif;padding:16px'>"
             + "<pre style='white-space:pre-wrap;font-family:inherit'>"

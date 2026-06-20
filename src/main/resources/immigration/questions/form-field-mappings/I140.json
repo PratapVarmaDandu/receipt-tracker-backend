@@ -1,0 +1,49 @@
+{
+  "formType": "I140",
+  "sections": {
+    "part1_petitioner": {
+      "owner": "EMPLOYER",
+      "fields": [
+        { "questionKey": "employer.legalName",   "pdfFieldName": "Pt1Line1_LegalName" },
+        { "questionKey": "employer.ein",          "pdfFieldName": "Pt1Line5_IRS_EIN" },
+        { "questionKey": "employer.addressLine1", "pdfFieldName": "Pt1Line6a_StreetNumberName" },
+        { "questionKey": "employer.city",         "pdfFieldName": "Pt1Line6c_CityOrTown" },
+        { "questionKey": "employer.state",        "pdfFieldName": "Pt1Line6d_State" },
+        { "questionKey": "employer.zipCode",      "pdfFieldName": "Pt1Line6e_ZipCode" }
+      ]
+    },
+    "part2_beneficiary": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        { "questionKey": "beneficiary.lastName",           "pdfFieldName": "Pt2Line1a_FamilyName" },
+        { "questionKey": "beneficiary.firstName",          "pdfFieldName": "Pt2Line1b_GivenName" },
+        { "questionKey": "beneficiary.middleName",         "pdfFieldName": "Pt2Line1c_MiddleName" },
+        { "questionKey": "beneficiary.dateOfBirth",        "pdfFieldName": "Pt2Line5_DateOfBirth" },
+        { "questionKey": "beneficiary.countryOfBirth",     "pdfFieldName": "Pt2Line6_CountryOfBirthLastResidence" },
+        { "questionKey": "beneficiary.citizenshipCountry", "pdfFieldName": "Pt2Line7_CountryOfCitizenship" },
+        { "questionKey": "beneficiary.alienNumber",        "pdfFieldName": "Pt2Line3_AlienRegistrationNumber" },
+        { "questionKey": "beneficiary.uscisAccountNumber", "pdfFieldName": "Pt2Line4_USCISOnlineAcctNumber" },
+        { "questionKey": "beneficiary.addressLine1",       "pdfFieldName": "Pt2Line9a_StreetNumberName" },
+        { "questionKey": "beneficiary.addressCity",        "pdfFieldName": "Pt2Line9c_CityOrTown" },
+        { "questionKey": "beneficiary.addressState",       "pdfFieldName": "Pt2Line9d_State" },
+        { "questionKey": "beneficiary.addressZip",         "pdfFieldName": "Pt2Line9e_ZipCode" }
+      ]
+    },
+    "part3_job": {
+      "owner": "EMPLOYER",
+      "fields": [
+        { "questionKey": "job.title",        "pdfFieldName": "Pt3Line1_JobTitle" },
+        { "questionKey": "job.socCode",      "pdfFieldName": "Pt3Line2_SOCOccupationCode" },
+        { "questionKey": "job.salaryAmount", "pdfFieldName": "Pt3Line4a_PrevailingWageAmount" }
+      ]
+    },
+    "part9_attorney": {
+      "owner": "ATTORNEY",
+      "fields": [
+        { "questionKey": "attorney.barNumber", "pdfFieldName": "Pt9Line4_StateBarNumber" },
+        { "questionKey": "attorney.firmName",  "pdfFieldName": "Pt9Line1_FirmOrganizationName" },
+        { "questionKey": "attorney.email",     "pdfFieldName": "Pt9Line8_Email" }
+      ]
+    }
+  }
+}

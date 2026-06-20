@@ -327,6 +327,134 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 
 **Employer onboarding email-match** — same pattern as `POST /api/immigration/cases/join/{token}` (beneficiary invite). The throw message starts with `"Access denied:"` so `OrgPartnershipController.denied()` returns 403, not 400. Locally this always fails because `LocalDevSecurityFilter` injects `dev@localhost.local` — see CLAUDE.local.md for how to test.
 
+**FEAT-M1 — Automated deadline reminders** (`KeyDateReminderService`):
+- Entity: `KeyDateReminder` → `imm_key_date_reminders`; `@ManyToOne(LAZY)` to `KeyDate`; unique constraint on `(key_date_id, days_before_date, recipient_email)` prevents duplicate sends across restarts
+- `@Scheduled(cron = "0 0 8 * * *")` daily job; buckets: `{90, 60, 30, 14, 7, 1}` days
+- For each key date in the 90-day window: if `daysUntil <= bucket` and no existing reminder row → send + persist; each (key date × bucket × recipient) is sent exactly once
+- Recipients: assigned attorney (always); beneficiary CC'd when `CanonicalProfile.notificationEmailEnabled = true`
+- `@EnableScheduling` added to `ReceiptTrackerApplication` to activate all `@Scheduled` jobs
+
+**FEAT-M2 — RFE structured workflow** (`CaseRfeService`, `CaseRfeController`):
+- Entity: `CaseRfe` → `imm_case_rfes`; `@ManyToOne(LAZY)` to `ImmigrationCase`; status enum string: `OPEN | RESPONDED | WITHDRAWN | DISMISSED` (default `OPEN`); `respondedAt` nullable; `createdByUserId` plain `Long`
+- `create()`: WRITE_CASE + `requireAttorneyInFirm()`; default deadline = issuedDate + 87 days; upserts `PETITION_DEADLINE` `KeyDate` (find-or-create to prevent duplicates)
+- `update()`: null fields not applied (patch semantics); `respond()`: throws if already `RESPONDED`; sets `respondedAt = now()`
+- `CaseRfeDTO.daysUntilDeadline` computed via `ChronoUnit.DAYS.between(today, responseDeadline)`
+- Routes (all under `/api/immigration/cases/{caseId}/rfe`):
+  - `GET  /` — list RFEs for case (READ_CASE)
+  - `POST /` — create RFE (WRITE_CASE + attorney only)
+  - `PUT  /{rfeId}` — update metadata (WRITE_CASE + attorney only)
+  - `PUT  /{rfeId}/respond` — mark responded (WRITE_CASE + attorney only)
+
+**FEAT-M3 — USCIS receipt number polling** (`UscisPollingService`, `UscisPollingController`):
+- Entity: `UscisPollResult` → `imm_uscis_poll_results`; `caseId` is a plain `Long` (loose ref — cross-feature FK rule, same as `OrgOrder.receiptId`)
+- `@Scheduled(cron = "0 0 9 * * *")` daily job; finds all cases via `findByReceiptNumberIsNotNull()`
+- HTTP POST to `https://egov.uscis.gov/casestatus/landing.do`; form body `appReceiptNum=...&caseStatusSearchBtn=CHECK+STATUS`; uses `java.net.http.HttpClient` (no Spring config); 10s connect timeout, 15s request timeout
+- Status extracted via regex `(?i)<h4[^>]*>\s*(Case\s[^<]{3,200})\s*</h4>` — brittle if USCIS changes HTML layout; treat as best-effort
+- On detected status change: saves system `CaseEvent` (`EventType.STATUS_CHANGED`) + emails attorney via `EmailService.sendSimpleEmail()`
+- Routes:
+  - `GET  /api/immigration/cases/{caseId}/uscis-status-history` — poll history (READ_CASE)
+  - `POST /api/immigration/cases/{caseId}/uscis-check-now` — on-demand poll (READ_CASE + `requireAttorneyInFirm()`)
+
+**FEAT-M7 — Intake questionnaire / client data collection** (`ProfileDataRequestService`, `DataRequestController`):
+- Entity: `ProfileDataRequest` → `imm_profile_data_requests`; `caseId` and `requestedByUserId` are plain `Long` (cross-feature FK rule); `token` UUID unique; `sectionsRequested` JSON TEXT; status `PENDING | SUBMITTED | EXPIRED`; `submittedAt` nullable; `expiresAt`, `createdAt` non-null
+- `@PrePersist` sets `createdAt` and generates `token = UUID.randomUUID().toString()` if null
+- Routes:
+  - `POST /api/immigration/cases/{id}/data-requests` — create (ATTORNEY + PARALEGAL via `requireAccess WRITE_CASE`); body `{ targetRelationship, sections[], expiryDays }`; sends email with `{frontendUrl}/immigration/data-request/{token}`; `app.frontend.url` env var with fallback
+  - `GET  /api/immigration/cases/{id}/data-requests` — list for case (ATTORNEY, READ_CASE)
+  - `GET  /api/immigration/data-requests/{token}` — **public** (GET only, `permitAll()` in `SecurityConfig`); auto-expires stale PENDING rows; returns `DataRequestPublicDTO` with sections spec + prefilled `CanonicalProfileDTO` from beneficiary's profile
+  - `POST /api/immigration/data-requests/{token}/submit` — auth required; validates `targetRelationship == BENEFICIARY → caller.email == case.beneficiaryEmail`; calls `CanonicalProfileService.updateForBeneficiary()` (package-private); sets status `SUBMITTED`
+- `applySubmittedSections()` in service uses `ObjectMapper.convertValue(mergedMap, UpdateProfileRequest.class)` to reuse all existing encryption + persistence logic
+- `CanonicalProfileService.updateForBeneficiary(Beneficiary, UpdateProfileRequest)` — package-private method (same package as `ProfileDataRequestService`); upserts profile; no public exposure needed
+- `DataRequestPublicDTO`: id, caseNumber, beneficiaryName, beneficiaryEmail, targetRelationship, sections, status, expiresAt, prefillData (CanonicalProfileDTO or null)
+- Email is non-fatal: caught and logged WARN if `EmailService` is not configured
+
+**FEAT-M8 — Evidence checklist** (`ChecklistService`, `ChecklistController`, `ChecklistTemplateSeeder`):
+- Entities: `ChecklistTemplate` → `imm_checklist_templates` (form_type, item_key, label, category, required, condition_rule JSON TEXT nullable, sort_order); `ChecklistItem` → `imm_checklist_items` (case_id loose Long, template_id loose Long nullable, item_key, label, category, required, status, document_id loose Long nullable, waiver_reason TEXT nullable, verified_by_user_id loose Long nullable, verified_at, sort_order, created_at, updated_at)
+- Status lifecycle: `PENDING → UPLOADED → VERIFIED`; `PENDING → WAIVED` (attorney/paralegal only, reason required)
+- Condition rule: `ChecklistService.evaluateCondition()` parses JSON rule `{"caseTypeIn":["I485"]}` or `{"i140Approved":true}`; null/blank = always include
+- Seeder: `ChecklistTemplateSeeder implements ApplicationRunner` — seeds I129 (13 items), I485 (11 items), I140_EB2/EB3 (9 items each), PERM (8 items) on first startup; item keys are scoped as `{formType}_{ITEM_KEY}` to prevent cross-type collisions
+- `generate()` — requireAccess `MANAGE_CHECKLISTS`; loads templates for requested formTypes; evaluates condition; creates new PENDING items only for item keys not already present (preserves status of existing items)
+- `update()` — requireAccess `WRITE_CASE`; VERIFIED/WAIVED additionally require `MANAGE_CHECKLISTS`; VERIFIED sets verifiedByUserId + verifiedAt from caller; WAIVED requires non-blank waiverReason
+- Routes (all auth required):
+  - `POST /api/immigration/cases/{caseId}/checklist/generate` — MANAGE_CHECKLISTS; body `{ formTypes[] }`
+  - `GET  /api/immigration/cases/{caseId}/checklist` — READ_CASE; ordered by category + sort_order
+  - `PUT  /api/immigration/cases/{caseId}/checklist/{itemId}` — WRITE_CASE (VERIFIED/WAIVED: + MANAGE_CHECKLISTS)
+
+**Phase 4 — Canonical Question Registry + Form Packet System** (`CanonicalQuestionRegistry`, `DataResolver`):
+
+**JSON config files** (classpath: `immigration/questions/`):
+- `canonical-questions.json` — 44 questions with key, label, sublabel, owner (BENEFICIARY|EMPLOYER|ATTORNEY), dataSource (documentation path), friendlySection, type (TEXT|TEXT_SENSITIVE|DATE|NUMBER|BOOLEAN), required, validation constraints, encrypt flag, formsUsing[]
+- `form-field-mappings/I129.json`, `I485.json`, `I140.json` — per-form section→fields mappings; each field entry: `{ questionKey, pdfFieldName }` where pdfFieldName is the AcroForm field name in the USCIS PDF
+
+**Model classes** (`immigration/model/question/`): `CanonicalQuestion` (plain POJO, Jackson-deserialised), `FormFieldEntry` (record), `FormSectionMapping` (owner + fields[]), `FormFieldMapping` (formType + sections map), `ResolvedValue` record (value, source, verifiedAt) with factory methods `none()`, `fromProfile()`, `fromOrg()`, `fromCase()`
+
+**`CanonicalQuestionRegistry` @Service**:
+- `@PostConstruct init()` — loads canonical-questions.json + all form-field-mappings/*.json via `PathMatchingResourcePatternResolver`; fails gracefully (logs WARN) if files missing
+- `getQuestionsForForms(List<String> formTypes)` — deduplicated ordered list (preserves JSON array order) of questions whose `formsUsing` intersects the requested set
+- `getQuestionsByOwner(List<CanonicalQuestion>)` → `LinkedHashMap<String, List<CanonicalQuestion>>` keyed by owner
+- `getQuestionsBySection(List<CanonicalQuestion>)` → `LinkedHashMap<String, List<CanonicalQuestion>>` keyed by friendlySection
+- `getOrderedFieldsForForm(String formType)` → flat ordered `List<FormFieldEntry>` across all sections (for PDF fill layer)
+- `findByKey(String)` → `Optional<CanonicalQuestion>`; `getFormMapping(String)` → `Optional<FormFieldMapping>`
+- `sectionLabel(String sectionId)` — static lookup; 10 friendly section IDs → display labels
+
+**`DataResolver` @Service**:
+- `ResolutionContext` record — bundles `CanonicalProfile profile`, `ImmOrg employerOrg`, `ImmOrg lawFirmOrg`, `ImmigrationCase immigrationCase`, `AttorneyProfile attorneyProfile`; any field may be null
+- `resolve(CanonicalQuestion, ResolutionContext)` → `ResolvedValue` — dispatches via `switch` on questionKey; never throws (logs WARN, returns `none()`)
+- `resolveAll(List<CanonicalQuestion>, ResolutionContext)` → `Map<String, ResolvedValue>` — one-pass resolution for all questions; keys are questionKey strings
+- Routing logic:
+  - `beneficiary.*` → `CanonicalProfile` fields; encrypted fields (passportNumber, i94Number, alienNumber, ssn, eadCardNumber) decrypted via `EncryptionService.decrypt()`; I-94 prefers `i94NumberEnc`, falls back to legacy `i94Number` plain column
+  - `beneficiary.address*` → parsed from `currentAddressJson` (Map `{line1,city,state,zip,country}`)
+  - `job.*` → first entry of `employmentJson` array for title/startDate; `job.socCode`/`salaryAmount`/`hoursPerWeek` return `none()` (no backing field yet)
+  - `employer.*` → `ImmOrg employerOrg` fields
+  - `attorney.firmName` / `attorney.email` → `ImmOrg lawFirmOrg` fields; `attorney.barNumber` → first entry of `AttorneyProfile.barNumbersJson[0].barNumber`
+- **No DB calls** in DataResolver — callers load entities before calling resolve()
+
+**Friendly section IDs** (10): `personal_info`, `passport_id`, `current_status`, `company_info`, `job_details`, `employment_history`, `education`, `family_dependents`, `ead_info`, `notification_prefs`
+
+**Filing Package System** (`FilingPackageService`, `FilingPackageController`):
+- **Entities**: `FilingPackage` → `imm_filing_packages` (caseId loose Long, name, selectedFormTypesJson TEXT, status DRAFT|QUESTIONNAIRES_SENT|ANSWERS_COLLECTED|ATTORNEY_REVIEW|APPROVED|GENERATED|FILED, approvedByUserId, approvedAt, generatedPdfPacketKey, createdByUserId); `FilingPackageQuestionnaire` → `imm_filing_package_questionnaires` (FilingPackage FK, targetRelationship BENEFICIARY|EMPLOYER|ATTORNEY, token UUID unique, questionnaireSpecJson TEXT = JSON array of question keys, status PENDING|SUBMITTED|EXPIRED, submittedAt, submittedByUserId loose Long, submittedAnswersJson TEXT, expiresAt); `FilingPackageAnswer` → `imm_filing_package_answers` (FilingPackage FK, questionKey, valueJson TEXT, valueHash VARCHAR(64) SHA-256 of plaintext, owner, source profile|org|questionnaire|attorney_override, verifiedAt, answeredByUserId, attorneyOverrideReason TEXT); unique constraint on (package_id, question_key)
+- **Sensitive field storage**: `valueJson` stores AES-256-GCM ciphertext for encrypt=true questions; `valueHash` stores SHA-256 hex of plaintext for comparison without decryption; non-sensitive fields store plaintext in `valueJson`
+- **Create flow**: MANAGE_CHECKLISTS scope → load questions via CanonicalQuestionRegistry → resolve prefills via DataResolver → save FilingPackageAnswer rows (source="profile"|"org") → create one FilingPackageQuestionnaire per owner group; questionnaire `questionnaireSpecJson` = JSON array of that owner's question keys
+- **Send questionnaires**: sets status → QUESTIONNAIRES_SENT; sends `sendSimpleEmail()` to beneficiary (case.beneficiary.user.email), employer (ImmOrg.contactEmail), attorney (ImmOrgMember.email for assignedAttorneyMemberId)
+- **Public GET** (`/api/immigration/packages/questionnaires/{token}` — SecurityConfig permitAll GET): returns `QuestionnairePublicDTO` with sections + questions; sensitive (encrypt=true) questions always have null prefillValue; loads current answer values from FilingPackageAnswer for non-sensitive prefills
+- **Submit** (auth required): validates caller email vs case.beneficiary.user.email (BENEFICIARY), ImmOrg member/contactEmail (EMPLOYER), or assignedAttorneyMember.email (ATTORNEY); upserts FilingPackageAnswer rows (source="questionnaire"); writes back to CanonicalProfile (BENEFICIARY) or ImmOrg (EMPLOYER); auto-transitions package → ANSWERS_COLLECTED when all questionnaires submitted
+- **Write-back to CanonicalProfile** (BENEFICIARY submit): updates plain text fields directly on entity; encrypted fields go through EncryptionService; JSON sub-fields (address, employment) are NOT written back (partial JSON patching is unsafe)
+- **Attorney override**: APPROVE_FORMS scope; upserts FilingPackageAnswer with source="attorney_override"; stores overrideReason
+- **Review summary**: groups answers by owner with completeness %; flags: missing required (no value), stale (source=profile|org and verifiedAt null or >90 days old)
+- **Approve**: APPROVE_FORMS scope; sets status → APPROVED, records approvedByUserId + approvedAt
+- **Endpoints**: POST/GET/GET `/cases/{id}/packages[/{packageId}]`, POST `…/{packageId}/send-questionnaires`, GET `…/{packageId}/review-summary`, POST `…/{packageId}/approve-answers`, PUT `…/{packageId}/answers/{answerKey}`, GET/POST `/packages/questionnaires/{token}[/submit]`
+- **SecurityConfig**: added `GET /api/immigration/packages/questionnaires/**` to permitAll in production profile
+
+**Form Version Tracking** (`FormVersionService`, `FormVersionController`, `FormVersionScheduler`):
+- **Entities**: `FormVersion` → `imm_form_versions` (formType VARCHAR(50), editionDate VARCHAR(20), downloadedAt, pdfStorageKey VARCHAR(500), status PENDING_REVIEW|APPROVED|DEPRECATED, approvedByUserId loose Long, approvedAt, fieldMappingVerified BOOLEAN, pdfFieldNamesJson TEXT, releaseNotes TEXT, proposedMappingJson TEXT); `FormVersionAuditEvent` → `imm_form_version_audit` (formType, editionDate, action DOWNLOADED|APPROVED|DEPRECATED|MAPPING_UPDATED|CHECK_NO_CHANGE|CHECK_ERROR, performedByUserId loose Long, detail TEXT)
+- **Scheduler** (`FormVersionScheduler`): `@Scheduled(cron = "0 0 1 1 * ?")` — first day of each month at 1am; delegates to `FormVersionService.checkForUpdates()`; catches all exceptions per-form so one failure doesn't abort the entire check
+- **checkForUpdates()**: fetches `https://www.uscis.gov/forms/all-forms` via Java `HttpClient`; regex-parses edition date near form number (e.g. "I-129"); on new edition: downloads PDF from `https://www.uscis.gov/sites/default/files/document/forms/{lower}.pdf`, extracts AcroForm field names via PDFBox `Loader.loadPDF()` + `PDAcroForm.getFields()`, stores PDF under `{storagePath}/form-versions/{formType}/{edition}.pdf`, saves `FormVersion` (status=PENDING_REVIEW), notifies all ATTORNEY+OWNER members of all LAW_FIRM ImmOrgs via `sendSimpleEmail()`
+- **Access control** (`requireAttorneyOrOwner()`): NOT case-scoped — checks that caller is an ACTIVE ImmOrgMember of any LAW_FIRM org with role ATTORNEY or OWNER; does NOT use PermissionService
+- **approve()**: validates status=PENDING_REVIEW + fieldMappingVerified=true; deprecates current APPROVED row; sets status=APPROVED + approvedByUserId/At; saves audit
+- **uploadMapping()**: validates JSON parseable as `FormFieldMapping`; checks all `questionKey` values exist in `CanonicalQuestionRegistry`; stores JSON in `proposedMappingJson`; sets `fieldMappingVerified=true`
+- **FORM_NUMBERS map**: static map from FormType.name() → USCIS form number string; DS160 omitted (DOS form, not USCIS)
+
+**PDF Generation Service** (`ImmPdfGenerationService`, endpoints on `FilingPackageController`):
+- **Entity**: `GeneratedPdfPacket` → `imm_generated_pdf_packets` (packageId loose Long, caseId loose Long, formVersionsUsedJson TEXT = `[{formType, versionId, editionDate}]`, generatedAt, generatedByUserId loose Long, status DRAFT|ATTORNEY_APPROVED|FILED, attorneyApprovedAt, attorneyApprovedBy loose Long, pdfStorageKey VARCHAR(500) relative from storageRoot e.g. `pdf-packets/{caseId}/{uuid}.zip`, generationAuditJson TEXT = `[{questionKey, pdfField, source, versionId, filled, formType}]`)
+- **Pre-generation checks** (all must pass): 1) package status=APPROVED; 2) each formType has an APPROVED FormVersion with fieldMappingVerified=true; 3) no newer PENDING_REVIEW version (409 CONFLICT with `PENDING_REVIEW_EXISTS:` prefix if any — frontend shows override prompt); 4) all required FilingPackageAnswer rows present and non-blank; 5) all required ChecklistItem rows are UPLOADED or WAIVED
+- **PDF fill loop**: loads PDF from `storageRoot/{formVersion.pdfStorageKey}` via `Loader.loadPDF(bytes)` (PDFBox 3.x); for each field entry in `form-field-mappings/{formType}.json`, resolves FilingPackageAnswer; decrypts if `CanonicalQuestion.isEncrypt()`; calls `PDField.setValue()`; clears plaintext from memory immediately; calls `acroForm.flatten()` after all fills; audit entry captured per field
+- **Cover sheet**: PDFBox `PDDocument` + `PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD/HELVETICA)`; contains case number, date, generated-by name, forms+editions table, attorney signature line
+- **ZIP**: `java.util.zip.ZipOutputStream`; entries: `00_cover-sheet.pdf`, `01_{formType}_{edition}.pdf`, …; stored at `storageRoot/pdf-packets/{caseId}/{uuid}.zip`
+- **approve()**: APPROVE_FORMS scope; idempotent; sets status→ATTORNEY_APPROVED; writes `FormVersionAuditEvent` action=PACKET_APPROVED per form
+- **Endpoints**: POST `…/generate-pdf` body `{overridePendingReview: bool}`; GET `…/packets`; GET `…/packets/{id}/download` streams ZIP; POST `…/packets/{id}/approve`; all require APPROVE_FORMS scope
+
+**Document Scan Service** (`ImmDocumentScanService`, controller `ImmDocumentScanController`):
+- **Purpose**: AI-powered document scanning that extracts fields for user review — **NEVER saves data**, returns only
+- **Reuses from `ClaudeVisionService`** (made public): `renderPdfToImages(File)`, `buildRequestBody(images, mediaType, prompt)`, `callAnthropicApi(String)`, `readImageBytes(File)`, `detectImageMediaType(String)`, `isReadyForVision()`
+- **Detection**: first pass sends `DOCUMENT_TYPE_DETECTION_PROMPT` → one of: `PASSPORT | US_VISA_STAMP | I94_PRINTOUT | I797_NOTICE | I20_FORM | EAD_CARD | I140_APPROVAL | DS2019 | UNKNOWN`
+- **Extraction**: second pass with doc-type-specific JSON prompt; each prompt includes a `confidence` map per field (0.0–1.0)
+- **`ScanResult` DTO**: `docTypeDetected`, `extractedFields: Map<String, FieldExtraction>`, `lowConfidenceFields: List<String>`, `caseReceiptNumberSuggestion` (non-null for I797 only)
+- **`FieldExtraction` record**: `value`, `confidence`, `needsReview` (= confidence < 0.85)
+- **Profile scan** (`POST /api/immigration/profile/scan`): any authenticated user; validates file (PDF/JPG/PNG, ≤ 10 MB)
+- **Case scan** (`POST /api/immigration/cases/{id}/scan-document`): requires WRITE_CASE grant; same validation; populates `caseReceiptNumberSuggestion` for I-797
+- **503 if Vision AI disabled** (`isReadyForVision()` = false — ANTHROPIC_API_KEY missing or VISION_AI_ENABLED=false)
+- **File handling**: saved to OS temp file → rendered → deleted in `finally` block; never persisted
+
 ## Tests
 All tests live under `src/test/java/com/receipttracker/`.
 
@@ -364,3 +492,7 @@ mvn test                                              # run tests (94 total)
 - Don't use `float`/`double` for money — use `BigDecimal`
 - Don't use `requestMatchers("/api/shares/token/**").permitAll()` — must scope to GET only to keep POST action endpoint auth-protected
 - Don't let `p.waitFor()` block indefinitely — always use `p.waitFor(N, TimeUnit.SECONDS)` with `p.destroyForcibly()` on timeout
+- Don't add JSON sub-field write-back (address, employment, education JSON columns) in `FilingPackageService.writeBackAnswers()` — partial JSON patching is unsafe; only plain scalar columns are written back
+- Don't add cascades from `FilingPackage` → `FilingPackageQuestionnaire` / `FilingPackageAnswer` — kept separate to allow independent lifecycle management (e.g. re-generate without wiping answers)
+- Don't use `PermissionService.requireAccess()` in `FormVersionService` — form versions are not case-scoped; use `requireAttorneyOrOwner()` which checks ImmOrgMember role in any LAW_FIRM org
+- Don't use Jsoup for USCIS page parsing — regex on raw HTML avoids adding a dependency; scraping is best-effort and all failures are caught/logged without aborting the scheduler

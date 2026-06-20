@@ -116,6 +116,24 @@ public class CanonicalProfileService {
     }
 
     /**
+     * Update a beneficiary's profile on their behalf (called by ProfileDataRequestService
+     * after the intake token has been validated). Skips auth check intentionally.
+     */
+    @Transactional
+    void updateForBeneficiary(Beneficiary beneficiary, UpdateProfileRequest req) {
+        log.info(">>> updateForBeneficiary() beneficiaryId={}", beneficiary.getId());
+        CanonicalProfile profile = profileRepo.findByBeneficiary(beneficiary)
+                .orElseGet(() -> {
+                    CanonicalProfile p = new CanonicalProfile();
+                    p.setBeneficiary(beneficiary);
+                    return p;
+                });
+        applyUpdate(profile, req);
+        profileRepo.save(profile);
+        log.info("<<< updateForBeneficiary() done");
+    }
+
+    /**
      * Update the current user's canonical profile.
      * No PermissionService check — validates that caller IS the beneficiary.
      */

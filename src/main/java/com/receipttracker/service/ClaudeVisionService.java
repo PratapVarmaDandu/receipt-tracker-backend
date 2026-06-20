@@ -160,7 +160,19 @@ public class ClaudeVisionService {
         }
     }
 
-    private List<byte[]> renderPdfToImages(File pdfFile) throws IOException {
+    public boolean isReadyForVision() {
+        return enabled && apiKey != null && !apiKey.isBlank();
+    }
+
+    public String detectImageMediaType(String filename) {
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".webp")) return "image/webp";
+        return "image/png";
+    }
+
+    public List<byte[]> renderPdfToImages(File pdfFile) throws IOException {
         List<byte[]> images = new ArrayList<>();
         try (PDDocument doc = Loader.loadPDF(pdfFile)) {
             PDFRenderer renderer = new PDFRenderer(doc);
@@ -176,19 +188,15 @@ public class ClaudeVisionService {
         return images;
     }
 
-    private byte[] readImageBytes(File imageFile) throws IOException {
+    public byte[] readImageBytes(File imageFile) throws IOException {
         return Files.readAllBytes(imageFile.toPath());
     }
 
-    private String detectImageMediaType(String filename) {
-        String lower = filename.toLowerCase();
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-        if (lower.endsWith(".gif")) return "image/gif";
-        if (lower.endsWith(".webp")) return "image/webp";
-        return "image/png";
+    private String buildRequestBody(List<byte[]> images, String mediaType) throws Exception {
+        return buildRequestBody(images, mediaType, RECEIPT_PROMPT);
     }
 
-    private String buildRequestBody(List<byte[]> images, String mediaType) throws Exception {
+    public String buildRequestBody(List<byte[]> images, String mediaType, String prompt) throws Exception {
         List<Object> contentBlocks = new ArrayList<>();
 
         for (byte[] imageBytes : images) {
@@ -203,7 +211,7 @@ public class ClaudeVisionService {
 
         contentBlocks.add(objectMapper.createObjectNode()
                 .put("type", "text")
-                .put("text", RECEIPT_PROMPT));
+                .put("text", prompt));
 
         return objectMapper.writeValueAsString(objectMapper.createObjectNode()
                 .put("model", model)
@@ -214,7 +222,7 @@ public class ClaudeVisionService {
                                 .set("content", objectMapper.valueToTree(contentBlocks)))));
     }
 
-    private String callAnthropicApi(String requestBody) throws IOException, InterruptedException {
+    public String callAnthropicApi(String requestBody) throws IOException, InterruptedException {
         if (httpClient == null) {
             synchronized (this) {
                 if (httpClient == null) {

@@ -1,0 +1,53 @@
+{
+  "formType": "I485",
+  "sections": {
+    "part1_applicant": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        { "questionKey": "beneficiary.lastName",           "pdfFieldName": "Pt1Line1a_FamilyName" },
+        { "questionKey": "beneficiary.firstName",          "pdfFieldName": "Pt1Line1b_GivenName" },
+        { "questionKey": "beneficiary.middleName",         "pdfFieldName": "Pt1Line1c_MiddleName" },
+        { "questionKey": "beneficiary.addressLine1",       "pdfFieldName": "Pt1Line7a_StreetNumberName" },
+        { "questionKey": "beneficiary.addressCity",        "pdfFieldName": "Pt1Line7c_CityOrTown" },
+        { "questionKey": "beneficiary.addressState",       "pdfFieldName": "Pt1Line7d_State" },
+        { "questionKey": "beneficiary.addressZip",         "pdfFieldName": "Pt1Line7e_ZipCode" },
+        { "questionKey": "beneficiary.phone",              "pdfFieldName": "Pt1Line13_DaytimeTelephoneNumber" },
+        { "questionKey": "beneficiary.uscisAccountNumber", "pdfFieldName": "Pt1Line16_USCISOnlineAcctNumber" }
+      ]
+    },
+    "part2_basis": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        { "questionKey": "beneficiary.alienNumber",   "pdfFieldName": "Pt2Line1_AlienRegistrationNumber" },
+        { "questionKey": "beneficiary.ssn",           "pdfFieldName": "Pt2Line2_SSN" }
+      ]
+    },
+    "part3_processing": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        { "questionKey": "beneficiary.dateOfBirth",        "pdfFieldName": "Pt3Line1_DateOfBirth" },
+        { "questionKey": "beneficiary.gender",             "pdfFieldName": "Pt3Line2_Male_Female" },
+        { "questionKey": "beneficiary.cityOfBirth",        "pdfFieldName": "Pt3Line3_CityTownOfBirth" },
+        { "questionKey": "beneficiary.countryOfBirth",     "pdfFieldName": "Pt3Line4_CountryOfBirth" },
+        { "questionKey": "beneficiary.citizenshipCountry", "pdfFieldName": "Pt3Line5_CountryOfCitizenship" },
+        { "questionKey": "beneficiary.passportNumber",     "pdfFieldName": "Pt3Line11a_PassportTravelDocNumber" },
+        { "questionKey": "beneficiary.passportCountry",    "pdfFieldName": "Pt3Line11b_TravelDocCountryOfIssuance" },
+        { "questionKey": "beneficiary.passportExpiryDate", "pdfFieldName": "Pt3Line11c_PassportExpDate" },
+        { "questionKey": "beneficiary.i94Number",          "pdfFieldName": "Pt3Line13_I94AdmissionNumber" },
+        { "questionKey": "beneficiary.portOfEntry",        "pdfFieldName": "Pt3Line14_LastArrivalPortOrLocation" },
+        { "questionKey": "beneficiary.entryDate",          "pdfFieldName": "Pt3Line15_DateOfLastArrival" },
+        { "questionKey": "beneficiary.currentVisaType",    "pdfFieldName": "Pt3Line16a_StatusWhenYouLastAdmitted" },
+        { "questionKey": "beneficiary.currentVisaExpiry",  "pdfFieldName": "Pt3Line16b_StatusExpirationDate" },
+        { "questionKey": "beneficiary.eadCategory",        "pdfFieldName": "Pt3Line18_EligibilityCategory" }
+      ]
+    },
+    "part14_attorney": {
+      "owner": "ATTORNEY",
+      "fields": [
+        { "questionKey": "attorney.barNumber", "pdfFieldName": "Pt14Line3a_StateBarNumber" },
+        { "questionKey": "attorney.firmName",  "pdfFieldName": "Pt14Line1_FirmOrganizationName" },
+        { "questionKey": "attorney.email",     "pdfFieldName": "Pt14Line6_Email" }
+      ]
+    }
+  }
+}

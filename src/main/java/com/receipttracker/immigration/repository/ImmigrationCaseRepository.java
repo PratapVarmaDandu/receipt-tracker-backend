@@ -35,4 +35,6 @@ public interface ImmigrationCaseRepository extends JpaRepository<ImmigrationCase
 
     @Query("SELECT MAX(c.caseNumber) FROM ImmigrationCase c WHERE c.caseNumber LIKE :prefix%")
     Optional<String> findMaxCaseNumberWithPrefix(@Param("prefix") String prefix);
+
+    List<ImmigrationCase> findByReceiptNumberIsNotNull();
 }
