@@ -168,6 +168,7 @@ public class ImmDocumentScanService {
     @Autowired private UserRepository userRepo;
     @Autowired private ImmigrationCaseRepository caseRepo;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private AuditService auditService;
 
     private User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -186,7 +187,11 @@ public class ImmDocumentScanService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Document scanning requires Vision AI to be enabled (ANTHROPIC_API_KEY not configured).");
         }
-        return detectAndExtract(file);
+        User caller = currentUser();
+        ScanResult result = detectAndExtract(file);
+        auditService.appendCaseEvent(null, "DocumentScan", null, "document_scan", "SCANNED", "ocr_scan",
+                "{\"docType\":\"" + result.docTypeDetected() + "\"}", caller.getId());
+        return result;
     }
 
     // ── Case document scan (ATTORNEY + PARALEGAL, uses WRITE_CASE grant) ──────
@@ -201,6 +206,10 @@ public class ImmDocumentScanService {
                     "Document scanning requires Vision AI to be enabled (ANTHROPIC_API_KEY not configured).");
         }
         ScanResult result = detectAndExtract(file);
+
+        // Audit: scan performed on case document
+        auditService.appendCaseEvent(caseId, "DocumentScan", null, "document_scan", "SCANNED", "ocr_scan",
+                "{\"docType\":\"" + result.docTypeDetected() + "\"}", caller.getId());
 
         // Suggest receipt number update for I-797 notices
         String suggestion = null;

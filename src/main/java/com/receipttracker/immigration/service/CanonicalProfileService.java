@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class CanonicalProfileService {
@@ -44,6 +45,7 @@ public class CanonicalProfileService {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private DocumentRepository documentRepo;
     @Autowired private DocumentService documentService;
+    @Autowired private AuditService auditService;
 
     // ── User resolution ──────────────────────────────────────────────────────
 
@@ -151,9 +153,16 @@ public class CanonicalProfileService {
                     return p;
                 });
 
+        // Capture scalar old-values for field-level audit before mutation
+        Map<String, String> oldSnapshot = captureProfileSnapshot(profile);
+
         applyUpdate(profile, req);
         CanonicalProfile saved = profileRepo.save(profile);
         log.info("<<< updateForCurrentUser() profileId={}", saved.getId());
+
+        // Emit one audit event per changed field (non-fatal, caseId=null — profile is cross-case)
+        emitProfileFieldAudits(oldSnapshot, req, saved.getId(), user.getId());
+
         return toDTO(saved);
     }
 
@@ -395,6 +404,92 @@ public class CanonicalProfileService {
                 p.setEntryDate(parseDate((String) curr.get("entryDate")));
                 p.setI94Number((String) curr.get("i94Number"));
             });
+    }
+
+    // ── Field-level audit helpers ─────────────────────────────────────────────
+
+    private Map<String, String> captureProfileSnapshot(CanonicalProfile p) {
+        Map<String, String> snap = new LinkedHashMap<>();
+        snap.put("legalFirstName",          p.getLegalFirstName());
+        snap.put("legalLastName",           p.getLegalLastName());
+        snap.put("middleName",              p.getMiddleName());
+        snap.put("dateOfBirth",             p.getDateOfBirth()       != null ? p.getDateOfBirth().toString()       : null);
+        snap.put("countryOfBirth",          p.getCountryOfBirth());
+        snap.put("citizenshipCountry",      p.getCitizenshipCountry());
+        snap.put("gender",                  p.getGender());
+        snap.put("currentVisaType",         p.getCurrentVisaType());
+        snap.put("currentVisaExpiry",       p.getCurrentVisaExpiry() != null ? p.getCurrentVisaExpiry().toString() : null);
+        snap.put("phone",                   p.getPhone());
+        snap.put("eadCategory",             p.getEadCategory());
+        snap.put("eadExpiryDate",           p.getEadExpiryDate()     != null ? p.getEadExpiryDate().toString()     : null);
+        snap.put("eadCaseNumber",           p.getEadCaseNumber());
+        snap.put("uscisOnlineAccountNumber",p.getUscisOnlineAccountNumber());
+        snap.put("preferredLanguage",       p.getPreferredLanguage());
+        snap.put("notes",                   p.getNotes());
+        // Sensitive — decrypt for change-detection; stored as $ prefix to distinguish
+        snap.put("$alienNumber",    safeDecrypt(p.getAlienNumberEnc()));
+        snap.put("$ssn",            safeDecrypt(p.getSsnEnc()));
+        snap.put("$i94Number",      safeDecrypt(p.getI94NumberEnc()));
+        snap.put("$eadCardNumber",  safeDecrypt(p.getEadCardNumberEnc()));
+        return snap;
+    }
+
+    private void emitProfileFieldAudits(Map<String, String> old, UpdateProfileRequest req,
+                                        Long profileId, Long actorUserId) {
+        // Non-sensitive scalar fields
+        emitIfChanged("legalFirstName",           old.get("legalFirstName"),           req.legalFirstName(),           profileId, actorUserId, false);
+        emitIfChanged("legalLastName",            old.get("legalLastName"),            req.legalLastName(),            profileId, actorUserId, false);
+        emitIfChanged("middleName",               old.get("middleName"),               req.middleName(),               profileId, actorUserId, false);
+        emitIfChanged("dateOfBirth",              old.get("dateOfBirth"),              req.dateOfBirth(),              profileId, actorUserId, false);
+        emitIfChanged("countryOfBirth",           old.get("countryOfBirth"),           req.countryOfBirth(),           profileId, actorUserId, false);
+        emitIfChanged("citizenshipCountry",       old.get("citizenshipCountry"),       req.citizenshipCountry(),       profileId, actorUserId, false);
+        emitIfChanged("gender",                   old.get("gender"),                   req.gender(),                   profileId, actorUserId, false);
+        emitIfChanged("currentVisaType",          old.get("currentVisaType"),          req.currentVisaType(),          profileId, actorUserId, false);
+        emitIfChanged("currentVisaExpiry",        old.get("currentVisaExpiry"),        req.currentVisaExpiry(),        profileId, actorUserId, false);
+        emitIfChanged("phone",                    old.get("phone"),                    req.phone(),                    profileId, actorUserId, false);
+        emitIfChanged("eadCategory",              old.get("eadCategory"),              req.eadCategory(),              profileId, actorUserId, false);
+        emitIfChanged("eadExpiryDate",            old.get("eadExpiryDate"),            req.eadExpiryDate(),            profileId, actorUserId, false);
+        emitIfChanged("eadCaseNumber",            old.get("eadCaseNumber"),            req.eadCaseNumber(),            profileId, actorUserId, false);
+        emitIfChanged("uscisOnlineAccountNumber", old.get("uscisOnlineAccountNumber"), req.uscisOnlineAccountNumber(), profileId, actorUserId, false);
+        emitIfChanged("preferredLanguage",        old.get("preferredLanguage"),        req.preferredLanguage(),        profileId, actorUserId, false);
+        emitIfChanged("notes",                    old.get("notes"),                    req.notes(),                    profileId, actorUserId, false);
+
+        // Sensitive fields — hash comparison via AuditService (isSensitive=true)
+        if (req.alienNumber()   != null && !req.alienNumber().isBlank())
+            emitIfChanged("alienNumber",   old.get("$alienNumber"),   req.alienNumber(),   profileId, actorUserId, true);
+        if (req.ssn()           != null && !req.ssn().isBlank())
+            emitIfChanged("ssn",           old.get("$ssn"),           req.ssn(),           profileId, actorUserId, true);
+        if (req.i94Number()     != null && !req.i94Number().isBlank())
+            emitIfChanged("i94Number",     old.get("$i94Number"),     req.i94Number(),     profileId, actorUserId, true);
+        if (req.eadCardNumber() != null && !req.eadCardNumber().isBlank())
+            emitIfChanged("eadCardNumber", old.get("$eadCardNumber"), req.eadCardNumber(), profileId, actorUserId, true);
+
+        // JSON blobs — emit one aggregate event per updated blob (no diff; too large to store)
+        Stream.of(
+                new Object[]{"passports",     req.passports()},
+                new Object[]{"travelEntries", req.travelEntries()},
+                new Object[]{"currentAddress",req.currentAddress()},
+                new Object[]{"education",     req.education()},
+                new Object[]{"employment",    req.employment()},
+                new Object[]{"dependents",    req.dependents()},
+                new Object[]{"priorVisas",    req.priorVisas()}
+        ).filter(pair -> pair[1] != null).forEach(pair ->
+                auditService.appendCaseEvent(null, "CanonicalProfile", profileId,
+                        (String) pair[0], "CHANGED", "direct_edit", "{\"updated\":true}", actorUserId));
+    }
+
+    private void emitIfChanged(String fieldKey, String oldVal, String newVal,
+                                Long profileId, Long actorUserId, boolean isSensitive) {
+        if (newVal == null) return;
+        if (Objects.equals(oldVal, newVal)) return;
+        auditService.appendFieldChange(null, "CanonicalProfile", profileId, fieldKey,
+                oldVal, newVal, "direct_edit", isSensitive, actorUserId);
+    }
+
+    private String safeDecrypt(String enc) {
+        if (enc == null || enc.isBlank()) return null;
+        try { return encryptionService.decrypt(enc); }
+        catch (Exception e) { return null; }
     }
 
     private LocalDate parseDate(String s) {

@@ -1,0 +1,28 @@
+# Pre-built variant — expects target/*.jar to already exist locally.
+# Build with: scripts/deploy-local-build.sh
+# Do not use this file on the VM; use the standard Dockerfile for VM-side builds.
+
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        libheif-examples \
+        imagemagick \
+        libheif1 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/share/tesseract-ocr/4.00/tessdata /usr/share/tessdata
+ENV TESSDATA_PATH=/usr/share/tessdata
+
+RUN mkdir -p /app/uploads
+ENV UPLOAD_DIR=/app/uploads
+
+COPY app.jar app.jar
+COPY newrelic/newrelic.jar newrelic/newrelic.jar
+COPY newrelic/newrelic.yml newrelic/newrelic.yml
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]

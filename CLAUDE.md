@@ -454,6 +454,22 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - **Case scan** (`POST /api/immigration/cases/{id}/scan-document`): requires WRITE_CASE grant; same validation; populates `caseReceiptNumberSuggestion` for I-797
 - **503 if Vision AI disabled** (`isReadyForVision()` = false — ANTHROPIC_API_KEY missing or VISION_AI_ENABLED=false)
 - **File handling**: saved to OS temp file → rendered → deleted in `finally` block; never persisted
+- **Audit**: `scanForCase()` emits `SCANNED` event to `ImmFieldAuditEvent` with `caseId`; `scanForProfile()` emits with `caseId=null`
+
+**Phase 7 — Audit Service Expansion**:
+- **`ImmFieldAuditEvent`** → `imm_field_audit_events`: append-only field-level audit log; `case_id` is a loose nullable Long; `isSensitive=true` → stores SHA-256 hashes of old/new values, never plaintext; `isSensitive=false` → stores actual values in `detail` JSON
+- **Actions**: `CHANGED | SCANNED | QUESTIONNAIRE_SUBMITTED | PDF_GENERATED | ATTORNEY_APPROVED | FORM_VERSION_APPROVED`
+- **Sources**: `direct_edit | ocr_scan | questionnaire | attorney_override | system`
+- **`AuditService` new methods**:
+  - `appendFieldChange(caseId, entityType, entityId, fieldKey, oldVal, newVal, source, isSensitive, actorUserId)` — non-fatal; hashes sensitive, stores plain detail for non-sensitive
+  - `appendCaseEvent(caseId, entityType, entityId, fieldKey, action, source, detail, actorUserId)` — for multi-field events (scan, questionnaire, PDF)
+  - `appendFormVersionEvent(formType, editionDate, action, actorUserId, detail)` — delegates to `FormVersionAuditEventRepository`
+  - `appendPdfGeneration(packetId, caseId, formVersionsUsed, generatedByUserId)` — one `ImmFieldAuditEvent` with `action=PDF_GENERATED`, `formVersionsUsed` in detail JSON
+  - `getCaseAudit(caseId)` → `CaseAuditDTO` — grouped: `caseEvents` (ImmAuditEvent), `dataChanges` (CHANGED/SCANNED/QUESTIONNAIRE_SUBMITTED), `formVersionEvents` (form types from case packages), `pdfEvents` (PDF_GENERATED/ATTORNEY_APPROVED)
+- **Call sites**: `CanonicalProfileService.updateForCurrentUser()` (per-field, `caseId=null`); `FilingPackageService.submitQuestionnaire()`; `ImmDocumentScanService.scanForCase()` + `scanForProfile()`; `ImmPdfGenerationService.generatePacket()`; `FormVersionService.approve()`
+- **`CanonicalProfileService` field audit**: captures snapshot of all scalar fields before `applyUpdate()`; emits one event per changed field after save; sensitive fields (`alienNumber`, `ssn`, `i94Number`, `eadCardNumber`) use `isSensitive=true`; JSON blobs emit one aggregate `CHANGED` event each
+- **`GET /api/immigration/cases/{id}/audit`** (APPROVE_FORMS scope = ATTORNEY + OWNER): returns `CaseAuditDTO`; handled by `ImmAuditController`
+- **`FormVersionService.approve()`**: now calls `auditService.appendFormVersionEvent()` instead of private `saveAudit()` for the APPROVED action; `saveAudit()` still used for DEPRECATED actions
 
 ## Tests
 All tests live under `src/test/java/com/receipttracker/`.
@@ -496,3 +512,6 @@ mvn test                                              # run tests (94 total)
 - Don't add cascades from `FilingPackage` → `FilingPackageQuestionnaire` / `FilingPackageAnswer` — kept separate to allow independent lifecycle management (e.g. re-generate without wiping answers)
 - Don't use `PermissionService.requireAccess()` in `FormVersionService` — form versions are not case-scoped; use `requireAttorneyOrOwner()` which checks ImmOrgMember role in any LAW_FIRM org
 - Don't use Jsoup for USCIS page parsing — regex on raw HTML avoids adding a dependency; scraping is best-effort and all failures are caught/logged without aborting the scheduler
+- Don't store raw sensitive values (passport number, SSN, A-number, I-94, EAD card) in `ImmFieldAuditEvent.detail` — always use `isSensitive=true` so only SHA-256 hashes are persisted
+- Don't add update/delete methods to `ImmFieldAuditEventRepository` — it is append-only like `ImmAuditEventRepository`
+- Don't call `appendFieldChange()` / `appendCaseEvent()` inside `@Transactional` boundaries where a failure would roll back data saves — all AuditService append methods are non-fatal (catch-and-log), so they are safe to call within the same transaction

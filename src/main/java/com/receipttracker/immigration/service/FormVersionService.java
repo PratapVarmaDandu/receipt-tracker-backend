@@ -74,6 +74,7 @@ public class FormVersionService {
 
     @Autowired private FormVersionRepository versionRepo;
     @Autowired private FormVersionAuditEventRepository auditRepo;
+    @Autowired private AuditService auditService;
     @Autowired private ImmOrgRepository orgRepo;
     @Autowired private ImmOrgMemberRepository orgMemberRepo;
     @Autowired private UserRepository userRepo;
@@ -158,8 +159,8 @@ public class FormVersionService {
         fv.setApprovedByUserId(caller.getId());
         fv.setApprovedAt(LocalDateTime.now());
         fv = versionRepo.save(fv);
-        saveAudit(fv.getFormType(), fv.getEditionDate(), "APPROVED", caller.getId(),
-            "Approved by " + caller.getEmail());
+        auditService.appendFormVersionEvent(fv.getFormType(), fv.getEditionDate(),
+                "FORM_VERSION_APPROVED", caller.getId(), "Approved by " + caller.getEmail());
         return toDTO(fv, null);
     }
 

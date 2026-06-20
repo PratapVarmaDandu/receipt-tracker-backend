@@ -52,6 +52,7 @@ public class FilingPackageService {
     @Autowired private EncryptionService encryptionService;
     @Autowired private EmailService emailService;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private AuditService auditService;
 
     // ── User resolution ───────────────────────────────────────────────────────
 
@@ -381,6 +382,12 @@ public class FilingPackageService {
         q.setSubmittedByUserId(caller.getId());
         q.setSubmittedAnswersJson(toJson(answers));
         questionnaireRepo.save(q);
+
+        // Audit: questionnaire submission
+        auditService.appendCaseEvent(pkg.getCaseId(), "FilingPackageQuestionnaire", q.getId(),
+                "questionnaire_submission", "QUESTIONNAIRE_SUBMITTED", "questionnaire",
+                "{\"packageId\":" + pkg.getId() + ",\"targetRelationship\":\"" + q.getTargetRelationship() + "\"}",
+                caller.getId());
 
         // Auto-transition package to ANSWERS_COLLECTED if all questionnaires submitted
         List<FilingPackageQuestionnaire> allQs = questionnaireRepo.findByFilingPackageId(pkg.getId());

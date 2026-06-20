@@ -243,10 +243,13 @@ public class ImmPdfGenerationService {
         pkg.setStatus("GENERATED");
         packageRepo.save(pkg);
 
-        // Case audit
+        // Case activity feed audit
         auditService.append(immCase, caller, "PDF_GENERATED",
                 "{\"packetId\":" + packet.getId() + ",\"forms\":" + toJson(formTypes) + "}",
                 FeedVisibility.ATTORNEY_ONLY);
+
+        // Field-level audit: PDF packet generated
+        auditService.appendPdfGeneration(packet.getId(), caseId, formVersionsUsedRaw, caller.getId());
 
         log.info("<<< generatePacket() packetId={}", packet.getId());
         return toDTO(packet);
