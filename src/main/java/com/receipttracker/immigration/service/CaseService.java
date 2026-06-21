@@ -720,6 +720,9 @@ public class CaseService {
 
     private void grantScopes(ImmigrationCase c, User subject, CaseRelationship relationship, User grantedBy, GrantScope... scopes) {
         for (GrantScope scope : scopes) {
+            if (grantRepo.existsByImmigrationCaseIdAndSubjectUserIdAndScopeAndRevokedAtIsNull(c.getId(), subject.getId(), scope)) {
+                continue;
+            }
             Grant g = new Grant();
             g.setImmigrationCase(c);
             g.setSubjectUser(subject);
@@ -733,6 +736,9 @@ public class CaseService {
     private void grantOrgScopes(ImmigrationCase c, Long orgId, CaseRelationship relationship,
                                  User grantedBy, GrantScope... scopes) {
         for (GrantScope scope : scopes) {
+            if (grantRepo.existsByImmigrationCaseIdAndSubjectImmOrgIdAndScopeAndRevokedAtIsNull(c.getId(), orgId, scope)) {
+                continue;
+            }
             Grant g = new Grant();
             g.setImmigrationCase(c);
             g.setSubjectImmOrgId(orgId);

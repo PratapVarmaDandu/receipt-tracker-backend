@@ -7,8 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 public class FilingPackageController {
@@ -19,70 +21,124 @@ public class FilingPackageController {
     // ── Case-scoped endpoints ─────────────────────────────────────────────────
 
     @PostMapping("/api/immigration/cases/{caseId}/packages")
-    public ResponseEntity<FilingPackageDTO> createPackage(
+    public ResponseEntity<?> createPackage(
             @PathVariable Long caseId,
             @RequestBody CreatePackageRequest req) {
-        return ResponseEntity.ok(packageService.create(caseId, req));
+        try {
+            return ResponseEntity.ok(packageService.create(caseId, req));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/api/immigration/cases/{caseId}/packages")
-    public ResponseEntity<List<FilingPackageDTO>> listPackages(@PathVariable Long caseId) {
-        return ResponseEntity.ok(packageService.listForCase(caseId));
+    public ResponseEntity<?> listPackages(@PathVariable Long caseId) {
+        try {
+            return ResponseEntity.ok(packageService.listForCase(caseId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/api/immigration/cases/{caseId}/packages/{packageId}")
-    public ResponseEntity<FilingPackageDTO> getPackage(
+    public ResponseEntity<?> getPackage(
             @PathVariable Long caseId,
             @PathVariable Long packageId) {
-        return ResponseEntity.ok(packageService.getPackage(caseId, packageId));
+        try {
+            return ResponseEntity.ok(packageService.getPackage(caseId, packageId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/api/immigration/cases/{caseId}/packages/{packageId}/send-questionnaires")
-    public ResponseEntity<FilingPackageDTO> sendQuestionnaires(
+    public ResponseEntity<?> sendQuestionnaires(
             @PathVariable Long caseId,
             @PathVariable Long packageId) {
-        return ResponseEntity.ok(packageService.sendQuestionnaires(caseId, packageId));
+        try {
+            return ResponseEntity.ok(packageService.sendQuestionnaires(caseId, packageId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/api/immigration/cases/{caseId}/packages/{packageId}/review-summary")
-    public ResponseEntity<ReviewSummaryDTO> reviewSummary(
+    public ResponseEntity<?> reviewSummary(
             @PathVariable Long caseId,
             @PathVariable Long packageId) {
-        return ResponseEntity.ok(packageService.getReviewSummary(caseId, packageId));
+        try {
+            return ResponseEntity.ok(packageService.getReviewSummary(caseId, packageId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/api/immigration/cases/{caseId}/packages/{packageId}/approve-answers")
-    public ResponseEntity<FilingPackageDTO> approveAnswers(
+    public ResponseEntity<?> approveAnswers(
             @PathVariable Long caseId,
             @PathVariable Long packageId) {
-        return ResponseEntity.ok(packageService.approveAnswers(caseId, packageId));
+        try {
+            return ResponseEntity.ok(packageService.approveAnswers(caseId, packageId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PutMapping("/api/immigration/cases/{caseId}/packages/{packageId}/answers/{answerKey}")
-    public ResponseEntity<FilingPackageAnswerDTO> overrideAnswer(
+    public ResponseEntity<?> overrideAnswer(
             @PathVariable Long caseId,
             @PathVariable Long packageId,
             @PathVariable String answerKey,
             @RequestBody AnswerOverrideRequest req) {
-        return ResponseEntity.ok(packageService.overrideAnswer(caseId, packageId, answerKey, req));
+        try {
+            return ResponseEntity.ok(packageService.overrideAnswer(caseId, packageId, answerKey, req));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ── PDF generation endpoints ──────────────────────────────────────────────
 
     @PostMapping("/api/immigration/cases/{caseId}/packages/{packageId}/generate-pdf")
-    public ResponseEntity<GeneratedPdfPacketDTO> generatePdf(
+    public ResponseEntity<?> generatePdf(
             @PathVariable Long caseId,
             @PathVariable Long packageId,
             @RequestBody(required = false) GeneratePdfRequest req) {
-        boolean override = req != null && req.overridePendingReview();
-        return ResponseEntity.ok(pdfGenerationService.generatePacket(caseId, packageId, override));
+        try {
+            boolean override = req != null && req.overridePendingReview();
+            return ResponseEntity.ok(pdfGenerationService.generatePacket(caseId, packageId, override));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/api/immigration/cases/{caseId}/packages/{packageId}/packets")
-    public ResponseEntity<List<GeneratedPdfPacketDTO>> listPackets(
+    public ResponseEntity<?> listPackets(
             @PathVariable Long caseId,
             @PathVariable Long packageId) {
-        return ResponseEntity.ok(pdfGenerationService.listPackets(caseId, packageId));
+        try {
+            return ResponseEntity.ok(pdfGenerationService.listPackets(caseId, packageId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/api/immigration/cases/{caseId}/packages/{packageId}/packets/{packetId}/download")
@@ -94,25 +150,43 @@ public class FilingPackageController {
     }
 
     @PostMapping("/api/immigration/cases/{caseId}/packages/{packageId}/packets/{packetId}/approve")
-    public ResponseEntity<GeneratedPdfPacketDTO> approvePacket(
+    public ResponseEntity<?> approvePacket(
             @PathVariable Long caseId,
             @PathVariable Long packageId,
             @PathVariable Long packetId) {
-        return ResponseEntity.ok(pdfGenerationService.approvePacket(caseId, packageId, packetId));
+        try {
+            return ResponseEntity.ok(pdfGenerationService.approvePacket(caseId, packageId, packetId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ── Public questionnaire endpoints ────────────────────────────────────────
 
     @GetMapping("/api/immigration/packages/questionnaires/{token}")
-    public ResponseEntity<QuestionnairePublicDTO> getQuestionnaire(@PathVariable String token) {
-        return ResponseEntity.ok(packageService.getPublicQuestionnaire(token));
+    public ResponseEntity<?> getQuestionnaire(@PathVariable String token) {
+        try {
+            return ResponseEntity.ok(packageService.getPublicQuestionnaire(token));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/api/immigration/packages/questionnaires/{token}/submit")
-    public ResponseEntity<Void> submitQuestionnaire(
+    public ResponseEntity<?> submitQuestionnaire(
             @PathVariable String token,
             @RequestBody SubmitQuestionnaireRequest req) {
-        packageService.submitQuestionnaire(token, req);
-        return ResponseEntity.ok().build();
+        try {
+            packageService.submitQuestionnaire(token, req);
+            return ResponseEntity.ok().build();
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 }

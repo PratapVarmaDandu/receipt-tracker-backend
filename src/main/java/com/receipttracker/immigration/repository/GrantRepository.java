@@ -14,6 +14,12 @@ public interface GrantRepository extends JpaRepository<Grant, Long> {
 
     List<Grant> findByImmigrationCaseAndRevokedAtIsNull(ImmigrationCase immigrationCase);
 
+    boolean existsByImmigrationCaseIdAndSubjectUserIdAndScopeAndRevokedAtIsNull(
+            Long caseId, Long subjectUserId, GrantScope scope);
+
+    boolean existsByImmigrationCaseIdAndSubjectImmOrgIdAndScopeAndRevokedAtIsNull(
+            Long caseId, Long subjectImmOrgId, GrantScope scope);
+
     @Query("""
         SELECT COUNT(g) > 0 FROM Grant g
         WHERE g.immigrationCase.id = :caseId

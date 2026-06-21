@@ -42,7 +42,7 @@ public class Grant {
     private CaseRelationship relationship;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "scope", nullable = false)
+    @Column(name = "scope", nullable = false, length = 30)
     private GrantScope scope;
 
     @ManyToOne(fetch = FetchType.LAZY)
