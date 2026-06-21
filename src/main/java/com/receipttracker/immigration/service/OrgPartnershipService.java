@@ -175,6 +175,29 @@ public class OrgPartnershipService {
             return enrichDTO(p);
         }
 
+        // Validate required fields before touching the DB
+        if (req.orgName() == null || req.orgName().isBlank()) {
+            throw new RuntimeException("Company name is required");
+        }
+        if (req.contactName() == null || req.contactName().isBlank()) {
+            throw new RuntimeException("Contact person name is required");
+        }
+        if (req.contactEmail() == null || req.contactEmail().isBlank()) {
+            throw new RuntimeException("Contact email is required");
+        }
+        if (req.address() == null || req.address().isBlank()) {
+            throw new RuntimeException("Street address is required");
+        }
+        if (req.city() == null || req.city().isBlank()) {
+            throw new RuntimeException("City is required");
+        }
+        if (req.stateCode() == null || req.stateCode().isBlank()) {
+            throw new RuntimeException("State is required");
+        }
+        if (req.zipCode() == null || req.zipCode().isBlank()) {
+            throw new RuntimeException("ZIP code is required");
+        }
+
         // Reject if caller already belongs to a LAW_FIRM org (cannot be both)
         List<ImmOrg> existingOrgs = immOrgRepo.findByMemberUserId(caller.getId());
         boolean hasConflict = existingOrgs.stream().anyMatch(o -> o.getOrgType() == ImmOrgType.LAW_FIRM);
@@ -188,22 +211,14 @@ public class OrgPartnershipService {
                 .findFirst()
                 .orElse(null);
 
-        if (employerOrg == null) {
+        boolean isNewOrg = (employerOrg == null);
+        if (isNewOrg) {
             employerOrg = new ImmOrg();
             employerOrg.setOrgType(ImmOrgType.EMPLOYER);
             employerOrg.setOwnerUserId(caller.getId());
-            employerOrg = immOrgRepo.save(employerOrg);
-
-            ImmOrgMember owner = new ImmOrgMember();
-            owner.setImmOrgId(employerOrg.getId());
-            owner.setUserId(caller.getId());
-            owner.setEmail(caller.getEmail());
-            owner.setRole(ImmOrgMemberRole.OWNER);
-            owner.setStatus(ImmOrgMemberStatus.ACTIVE);
-            immOrgMemberRepo.save(owner);
         }
 
-        // Apply employer profile details
+        // Apply all fields before the first save so NOT NULL constraints are satisfied
         employerOrg.setName(req.orgName());
         employerOrg.setContactName(req.contactName());
         employerOrg.setContactEmail(req.contactEmail());
@@ -213,7 +228,17 @@ public class OrgPartnershipService {
         employerOrg.setZipCode(req.zipCode());
         employerOrg.setEinNumber(req.einNumber());
         employerOrg.setWebsite(req.website());
-        immOrgRepo.save(employerOrg);
+        employerOrg = immOrgRepo.save(employerOrg);
+
+        if (isNewOrg) {
+            ImmOrgMember owner = new ImmOrgMember();
+            owner.setImmOrgId(employerOrg.getId());
+            owner.setUserId(caller.getId());
+            owner.setEmail(caller.getEmail());
+            owner.setRole(ImmOrgMemberRole.OWNER);
+            owner.setStatus(ImmOrgMemberStatus.ACTIVE);
+            immOrgMemberRepo.save(owner);
+        }
 
         // Activate the partnership
         p.setEmployerOrgId(employerOrg.getId());

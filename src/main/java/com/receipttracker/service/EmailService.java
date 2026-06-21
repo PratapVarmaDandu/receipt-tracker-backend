@@ -5,6 +5,7 @@ import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -19,6 +20,9 @@ public class EmailService {
 
     @Autowired(required = false)
     private JavaMailSender mailSender;
+
+    @Value("${spring.mail.username:}")
+    private String fromAddress;
 
     public void sendInvite(String to, String storeName, String ownerName, BigDecimal amount, String tokenUrl) {
         String subject = ownerName + " invited you to split an expense";
@@ -234,6 +238,9 @@ public class EmailService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
+            if (fromAddress != null && !fromAddress.isBlank()) {
+                helper.setFrom(fromAddress);
+            }
             mailSender.send(msg);
             log.info("Email sent to={} subject={}", to, subject);
         } catch (MailException | MessagingException e) {
