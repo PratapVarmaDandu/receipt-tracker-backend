@@ -663,6 +663,9 @@ public class FilingPackageService {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                             "This questionnaire is not for your account");
             }
+            // Fail closed: an unrecognized target relationship must never bypass validation.
+            default -> throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "This questionnaire is not for your account");
         }
     }
 

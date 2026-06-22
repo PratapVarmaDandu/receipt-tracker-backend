@@ -99,7 +99,9 @@ public class ProfileDataRequestService {
         String link = frontendUrl + "/immigration/data-request/" + pdr.getToken();
         sendRequestEmail(c, req.targetRelationship(), link, pdr.getExpiresAt());
 
-        log.info("<<< create() id={} token={}", pdr.getId(), pdr.getToken());
+        // Never log the token verbatim — it grants public, no-auth access to the
+        // beneficiary's prefilled PII via GET /api/immigration/data-requests/{token}.
+        log.info("<<< create() id={}", pdr.getId());
         return toDTO(pdr);
     }
 

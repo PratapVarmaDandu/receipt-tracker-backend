@@ -261,6 +261,10 @@ public class ImmPdfGenerationService {
     public List<GeneratedPdfPacketDTO> listPackets(Long caseId, Long packageId) {
         User caller = currentUser();
         permissionService.requireAccess(caller, caseId, GrantScope.APPROVE_FORMS);
+        // Ensure the package actually belongs to this case — APPROVE_FORMS is granted
+        // per-case, so a package/packet from another case must not be reachable here.
+        packageRepo.findByIdAndCaseId(packageId, caseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package not found"));
         return packetRepo.findByPackageIdOrderByCreatedAtDesc(packageId)
                 .stream().map(this::toDTO).toList();
     }
@@ -272,6 +276,8 @@ public class ImmPdfGenerationService {
         User caller = currentUser();
         permissionService.requireAccess(caller, caseId, GrantScope.APPROVE_FORMS);
 
+        packageRepo.findByIdAndCaseId(packageId, caseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package not found"));
         GeneratedPdfPacket packet = packetRepo.findByIdAndPackageId(packetId, packageId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Packet not found"));
 
@@ -295,6 +301,8 @@ public class ImmPdfGenerationService {
         User caller = currentUser();
         permissionService.requireAccess(caller, caseId, GrantScope.APPROVE_FORMS);
 
+        packageRepo.findByIdAndCaseId(packageId, caseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package not found"));
         GeneratedPdfPacket packet = packetRepo.findByIdAndPackageId(packetId, packageId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Packet not found"));
 

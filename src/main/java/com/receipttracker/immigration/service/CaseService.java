@@ -546,10 +546,13 @@ public class CaseService {
     ImmigrationCaseDTO toDTO(ImmigrationCase c, User caller) {
         String employerName    = orgName(c.getEmployerImmOrgId());
         String lawFirmName     = orgName(c.getLawFirmImmOrgId());
-        String attorneyName    = attorneyName(c.getAssignedAttorneyMemberId());
-        String attorneyEmail   = attorneyEmail(c.getAssignedAttorneyMemberId());
-        String paralegalName   = attorneyName(c.getAssignedParalegalMemberId());
-        String paralegalEmail  = attorneyEmail(c.getAssignedParalegalMemberId());
+        // Resolve each member row once (name + email) instead of two findById calls each.
+        MemberContact attorney  = memberContact(c.getAssignedAttorneyMemberId());
+        MemberContact paralegal = memberContact(c.getAssignedParalegalMemberId());
+        String attorneyName    = attorney.name();
+        String attorneyEmail   = attorney.email();
+        String paralegalName   = paralegal.name();
+        String paralegalEmail  = paralegal.email();
 
         return new ImmigrationCaseDTO(
                 c.getId(),
@@ -665,17 +668,21 @@ public class CaseService {
         return immOrgRepo.findById(orgId).map(ImmOrg::getName).orElse(null);
     }
 
-    private String attorneyName(Long memberId) {
-        if (memberId == null) return null;
-        return immOrgMemberRepo.findById(memberId)
-                .flatMap(m -> m.getUserId() != null ? userRepo.findById(m.getUserId()) : java.util.Optional.empty())
-                .map(User::getName)
-                .orElse(null);
+    /** Name + email for an org member, resolved with a single member lookup (plus one user lookup). */
+    private record MemberContact(String name, String email) {
+        static final MemberContact EMPTY = new MemberContact(null, null);
     }
 
-    private String attorneyEmail(Long memberId) {
-        if (memberId == null) return null;
-        return immOrgMemberRepo.findById(memberId).map(ImmOrgMember::getEmail).orElse(null);
+    private MemberContact memberContact(Long memberId) {
+        if (memberId == null) return MemberContact.EMPTY;
+        return immOrgMemberRepo.findById(memberId)
+                .map(m -> {
+                    String name = m.getUserId() != null
+                            ? userRepo.findById(m.getUserId()).map(User::getName).orElse(null)
+                            : null;
+                    return new MemberContact(name, m.getEmail());
+                })
+                .orElse(MemberContact.EMPTY);
     }
 
     private String computeCallerRelationship(ImmigrationCase c, User caller) {
