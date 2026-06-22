@@ -76,6 +76,9 @@ public class ImmigrationCase {
     @Column(name = "beneficiary_invite_email")
     private String beneficiaryInviteEmail;
 
+    @Column(name = "beneficiary_invite_expires_at")
+    private LocalDateTime beneficiaryInviteExpiresAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_id", nullable = false)
     private User createdBy;

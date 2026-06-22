@@ -217,6 +217,27 @@ public class CaseController {
         }
     }
 
+    /**
+     * Auth required — beneficiary accepts an invite from the in-app banner (by case id, no token).
+     * Used when the beneficiary is already signed in and never clicked the email link.
+     */
+    @PostMapping("/{id}/accept-invite")
+    public ResponseEntity<?> acceptInviteByCaseId(@PathVariable Long id) {
+        log.info("POST /api/immigration/cases/{}/accept-invite", id);
+        try {
+            ImmigrationCaseDTO dto = caseService.acceptInviteByCaseId(id);
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException e) {
+            String msg = ApiErrors.safeMessage(e);
+            log.warn("!!! acceptInviteByCaseId failed: {}", msg);
+            if (msg != null && (msg.startsWith("This invite is not for your account")
+                    || msg.startsWith("Access denied"))) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
     /** Conflict-of-interest check before opening a new case (ATTORNEY/OWNER in a law firm). */
     @PostMapping("/conflict-check")
     public ResponseEntity<?> conflictCheck(@RequestBody ConflictCheckRequest req) {

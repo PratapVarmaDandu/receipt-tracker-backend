@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +37,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CaseService {
 
     private static final Logger log = LoggerFactory.getLogger(CaseService.class);
+
+    /** Beneficiary invite links are valid for this many days after case creation. */
+    private static final int INVITE_VALIDITY_DAYS = 7;
 
     private static final GrantScope[] BENEFICIARY_SCOPES = {
         GrantScope.READ_CASE, GrantScope.WRITE_DOCS, GrantScope.MESSAGING
@@ -58,6 +63,9 @@ public class CaseService {
     @Autowired private PermissionService permissionService;
     @Autowired private AuditService auditService;
     @Autowired private EmailService emailService;
+
+    @Value("${app.frontend.url:http://localhost:4200}")
+    private String frontendUrl;
 
     private final AtomicInteger caseCounter = new AtomicInteger(1);
 
@@ -165,12 +173,12 @@ public class CaseService {
         c.setAssignedAttorneyMemberId(req.assignedAttorneyMemberId());
         c.setCreatedBy(caller);
 
-        // Mark invite pending if beneficiary is a stub (hasn't logged in yet)
-        boolean isStub = beneficiaryUser.getGoogleId().startsWith("PENDING_");
-        if (isStub) {
-            c.setBeneficiaryInviteToken(UUID.randomUUID().toString());
-            c.setBeneficiaryInviteEmail(beneficiaryEmail);
-        }
+        // Always create an invite for the beneficiary — this powers both the email link and
+        // the in-app "pending invite" banner. (Previously only brand-new stub users were given
+        // an invite, so an already-registered invitee received no email and no notification.)
+        c.setBeneficiaryInviteToken(UUID.randomUUID().toString());
+        c.setBeneficiaryInviteEmail(beneficiaryEmail);
+        c.setBeneficiaryInviteExpiresAt(LocalDateTime.now().plusDays(INVITE_VALIDITY_DAYS));
 
         ImmigrationCase saved = caseRepo.save(c);
 
@@ -191,10 +199,8 @@ public class CaseService {
 
         auditService.appendSystem(saved, "CASE_CREATED", "{\"caseType\":\"" + caseType.name() + "\"}");
 
-        // Send email invite if beneficiary is a new stub user
-        if (isStub) {
-            sendBeneficiaryInviteEmail(saved, beneficiaryEmail, caller);
-        }
+        // Email the beneficiary their invite link (non-fatal — logs if no SMTP configured)
+        sendBeneficiaryInviteEmail(saved, beneficiaryEmail, caller);
 
         log.info("<<< create() caseId={} caseNumber={} beneficiary={}",
                 saved.getId(), saved.getCaseNumber(), beneficiaryEmail);
@@ -292,6 +298,7 @@ public class CaseService {
         log.info(">>> getByInviteToken()");
         ImmigrationCase c = caseRepo.findByBeneficiaryInviteToken(token)
                 .orElseThrow(() -> new RuntimeException("Invalid invite link"));
+        requireInviteNotExpired(c);
         // Return without a caller — public view, minimal info
         return toDTOPublic(c);
     }
@@ -303,12 +310,45 @@ public class CaseService {
 
         ImmigrationCase c = caseRepo.findByBeneficiaryInviteToken(token)
                 .orElseThrow(() -> new RuntimeException("Invalid invite link"));
+        requireInviteNotExpired(c);
 
         if (c.getBeneficiaryInviteEmail() == null
                 || !c.getBeneficiaryInviteEmail().equalsIgnoreCase(caller.getEmail())) {
             throw new RuntimeException("This invite is not for your account (" + caller.getEmail() + ")");
         }
 
+        return consumeInvite(c, caller);
+    }
+
+    /**
+     * Accept an invite from the in-app banner — by case id, no token (the beneficiary is
+     * already logged in). Validates the caller's email against the invite email.
+     */
+    @Transactional
+    public ImmigrationCaseDTO acceptInviteByCaseId(Long caseId) {
+        log.info(">>> acceptInviteByCaseId() caseId={}", caseId);
+        User caller = currentUser();
+
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+
+        // Nothing pending — only return it if the caller can already read the case
+        if (c.getBeneficiaryInviteToken() == null) {
+            permissionService.requireAccess(caller, caseId, GrantScope.READ_CASE);
+            return toDTO(c, caller);
+        }
+
+        requireInviteNotExpired(c);
+        if (c.getBeneficiaryInviteEmail() == null
+                || !c.getBeneficiaryInviteEmail().equalsIgnoreCase(caller.getEmail())) {
+            throw new RuntimeException("This invite is not for your account (" + caller.getEmail() + ")");
+        }
+
+        return consumeInvite(c, caller);
+    }
+
+    /** Links the caller as the real beneficiary, re-points stub grants, and clears the invite. */
+    private ImmigrationCaseDTO consumeInvite(ImmigrationCase c, User caller) {
         // Link caller as the real beneficiary (stub → real)
         Beneficiary beneficiary = beneficiaryRepo.findByUser(caller)
                 .orElseGet(() -> {
@@ -334,12 +374,13 @@ public class CaseService {
         // Clear invite fields — invite consumed
         c.setBeneficiaryInviteToken(null);
         c.setBeneficiaryInviteEmail(null);
+        c.setBeneficiaryInviteExpiresAt(null);
         ImmigrationCase saved = caseRepo.save(c);
 
         auditService.append(saved, caller, "BENEFICIARY_JOINED",
                 "{\"email\":\"" + caller.getEmail() + "\"}", FeedVisibility.ALL);
 
-        log.info("<<< acceptInvite() caseId={} callerEmail={}", saved.getId(), caller.getEmail());
+        log.info("<<< consumeInvite() caseId={} callerEmail={}", saved.getId(), caller.getEmail());
         return toDTO(saved, caller);
     }
 
@@ -623,6 +664,14 @@ public class CaseService {
 
     // ── Private helpers ──────────────────────────────────────────────────────
 
+    private void requireInviteNotExpired(ImmigrationCase c) {
+        LocalDateTime expiresAt = c.getBeneficiaryInviteExpiresAt();
+        if (expiresAt != null && expiresAt.isBefore(LocalDateTime.now())) {
+            throw new RuntimeException(
+                "This invite link has expired. Please ask your case team to resend it.");
+        }
+    }
+
     private User findOrCreateStubUser(String email) {
         if (email.length() > 254) {
             throw new RuntimeException("Beneficiary email address is too long (max 254 characters)");
@@ -648,13 +697,13 @@ public class CaseService {
                 "Employer: %s\n" +
                 "Law Firm: %s\n\n" +
                 "To view your case, sign in at your Visa Tracker and follow the invitation link:\n" +
-                "/immigration/cases/join/%s\n\n" +
+                "%s/immigration/cases/join/%s\n\n" +
                 "Once you sign in, your case will be visible in your Visa Tracker dashboard.",
                 invitedBy.getName() != null ? invitedBy.getName() : invitedBy.getEmail(),
                 c.getCaseNumber(), c.getCaseType().name(),
                 orgName(c.getEmployerImmOrgId()) != null ? orgName(c.getEmployerImmOrgId()) : "N/A",
                 orgName(c.getLawFirmImmOrgId()) != null ? orgName(c.getLawFirmImmOrgId()) : "N/A",
-                c.getBeneficiaryInviteToken()
+                frontendUrl, c.getBeneficiaryInviteToken()
             );
             emailService.sendSimpleEmail(toEmail, subject, body);
         } catch (Exception e) {
