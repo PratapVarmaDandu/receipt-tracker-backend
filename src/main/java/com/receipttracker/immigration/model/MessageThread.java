@@ -1,6 +1,8 @@
 package com.receipttracker.immigration.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -25,7 +27,8 @@ public class MessageThread {
     private ImmigrationCase immigrationCase;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "channel", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "channel", nullable = false, length = 50)
     private MessageChannel channel;
 
     @OneToMany(mappedBy = "thread", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)

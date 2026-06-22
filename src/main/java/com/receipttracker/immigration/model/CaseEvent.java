@@ -2,6 +2,8 @@ package com.receipttracker.immigration.model;
 
 import com.receipttracker.model.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -25,7 +27,8 @@ public class CaseEvent {
     private ImmigrationCase immigrationCase;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "event_type", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "event_type", nullable = false, length = 50)
     private EventType eventType;
 
     @Column(name = "event_date", nullable = false)

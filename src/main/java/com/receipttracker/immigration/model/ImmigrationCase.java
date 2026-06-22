@@ -2,6 +2,8 @@ package com.receipttracker.immigration.model;
 
 import com.receipttracker.model.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -35,11 +37,13 @@ public class ImmigrationCase {
     private Long lawFirmImmOrgId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "case_type", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "case_type", nullable = false, length = 50)
     private CaseType caseType;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "status", nullable = false, length = 50)
     private CaseStatus status = CaseStatus.PROSPECTIVE;
 
     @Column(name = "priority_date")

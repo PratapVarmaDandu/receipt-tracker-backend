@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -29,12 +31,17 @@ public class FormInstance {
     @JoinColumn(name = "case_id", nullable = false)
     private ImmigrationCase immigrationCase;
 
+    // Force a plain VARCHAR column. Without @JdbcTypeCode, Hibernate 6 + MySQLDialect maps a
+    // String enum to a native MySQL ENUM(...) column, and ddl-auto=update never updates the
+    // enum value list when new constants are added → "Data truncated for column" on insert.
     @Enumerated(EnumType.STRING)
-    @Column(name = "form_type", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "form_type", nullable = false, length = 50)
     private FormType formType;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "status", nullable = false, length = 30)
     private FormStatus status = FormStatus.DRAFT;
 
     // JSON field map for the form — stored as TEXT for H2 + MySQL compatibility

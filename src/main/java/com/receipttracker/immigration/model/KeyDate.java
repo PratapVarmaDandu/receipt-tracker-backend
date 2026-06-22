@@ -1,6 +1,8 @@
 package com.receipttracker.immigration.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -24,7 +26,8 @@ public class KeyDate {
     private ImmigrationCase immigrationCase;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "date_type", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "date_type", nullable = false, length = 50)
     private KeyDateType dateType;
 
     @Column(name = "label")

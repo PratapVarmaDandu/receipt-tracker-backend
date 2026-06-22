@@ -2,6 +2,8 @@ package com.receipttracker.immigration.model;
 
 import com.receipttracker.model.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -34,7 +36,8 @@ public class ConsentRecord {
 
     // Which relationship type this consent covers (e.g. ATTORNEY, HR_ADMIN)
     @Enumerated(EnumType.STRING)
-    @Column(name = "covers_relationship", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "covers_relationship", nullable = false, length = 50)
     private CaseRelationship coversRelationship;
 
     @Column(name = "granted", nullable = false)

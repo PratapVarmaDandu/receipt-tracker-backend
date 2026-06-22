@@ -121,7 +121,7 @@ public class FormMappingService {
 
         // Travel document
         // TODO: verify field against official form instruction (I-129 Part 3, Item 6)
-        m.put("passportNumber", p.getPassportNumberEnc() != null ? "[encrypted — decrypted on display]" : null);
+        m.put("passportNumber", p.getPassportNumberEnc() != null ? "[encrypted]" : null);
         // TODO: verify field against official form instruction (I-129 Part 3, Item 7)
         m.put("passportExpiryDate", str(p.getPassportExpiryDate()));
 
@@ -161,7 +161,7 @@ public class FormMappingService {
 
         // Travel document section
         // TODO: verify field against official form instruction (DS-160 Travel Document 1)
-        m.put("passportNumber", p.getPassportNumberEnc() != null ? "[encrypted — decrypted on display]" : null);
+        m.put("passportNumber", p.getPassportNumberEnc() != null ? "[encrypted]" : null);
         // TODO: verify field against official form instruction (DS-160 Travel Document 2)
         m.put("passportIssueDate", str(p.getPassportIssueDate()));
         // TODO: verify field against official form instruction (DS-160 Travel Document 3)

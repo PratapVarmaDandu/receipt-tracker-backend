@@ -2,6 +2,8 @@ package com.receipttracker.immigration.model;
 
 import com.receipttracker.model.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -39,7 +41,8 @@ public class ImmAuditEvent {
     private String detail; // JSON blob, optional structured context
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "visibility", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "visibility", nullable = false, length = 50)
     private FeedVisibility visibility = FeedVisibility.ALL;
 
     @Column(name = "created_at", nullable = false)

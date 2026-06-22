@@ -2,6 +2,8 @@ package com.receipttracker.immigration.model;
 
 import com.receipttracker.model.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -38,10 +40,12 @@ public class Grant {
     private Long subjectImmOrgId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "relationship", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "relationship", nullable = false, length = 50)
     private CaseRelationship relationship;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "scope", nullable = false, length = 50)
     private GrantScope scope;
 

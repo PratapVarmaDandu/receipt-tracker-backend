@@ -1,6 +1,8 @@
 package com.receipttracker.immigration.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,7 +24,8 @@ public class ImmOrg {
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "org_type", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "org_type", nullable = false, length = 50)
     private ImmOrgType orgType;
 
     // loose ref to users.id — no FK per cross-feature FK rule

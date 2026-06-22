@@ -1,6 +1,8 @@
 package com.receipttracker.immigration.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,7 +25,8 @@ public class Appointment {
     private ImmigrationCase immigrationCase;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "appointment_type", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "appointment_type", nullable = false, length = 50)
     private AppointmentType appointmentType;
 
     @Column(name = "scheduled_at", nullable = false)
@@ -36,7 +39,8 @@ public class Appointment {
     private String notes;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "status", nullable = false, length = 50)
     private AppointmentStatus status = AppointmentStatus.UPCOMING;
 
     @Column(name = "created_at", nullable = false)
