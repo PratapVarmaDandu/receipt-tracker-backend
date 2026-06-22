@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.CaseRfeDTO;
 import com.receipttracker.immigration.dto.CreateRfeRequest;
 import com.receipttracker.immigration.dto.UpdateRfeRequest;
@@ -66,7 +67,7 @@ public class CaseRfeController {
     }
 
     private ResponseEntity<?> denied(RuntimeException e) {
-        String msg = e.getMessage();
+        String msg = ApiErrors.safeMessage(e);
         if (msg != null && msg.startsWith("Access denied")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
         }

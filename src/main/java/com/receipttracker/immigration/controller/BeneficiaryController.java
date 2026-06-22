@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.BeneficiaryDTO;
 import com.receipttracker.immigration.service.BeneficiaryService;
 import org.slf4j.Logger;
@@ -30,7 +31,7 @@ public class BeneficiaryController {
             return ResponseEntity.ok(dto);
         } catch (Exception e) {
             log.error("!!! initBeneficiary failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -45,7 +46,7 @@ public class BeneficiaryController {
             return ResponseEntity.ok(dto);
         } catch (Exception e) {
             log.error("!!! getCurrent failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 

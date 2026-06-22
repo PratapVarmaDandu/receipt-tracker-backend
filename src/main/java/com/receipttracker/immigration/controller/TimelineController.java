@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.CreateAppointmentRequest;
 import com.receipttracker.immigration.dto.CreateEventRequest;
 import com.receipttracker.immigration.dto.TimelineItemDTO;
@@ -68,7 +69,7 @@ public class TimelineController {
     }
 
     private ResponseEntity<?> handleError(RuntimeException e) {
-        String msg = e.getMessage();
+        String msg = ApiErrors.safeMessage(e);
         if (msg != null && msg.startsWith("Access denied")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
         }

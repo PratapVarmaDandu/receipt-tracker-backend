@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.service.FormShareService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,7 @@ public class FormShareController {
         try {
             return ResponseEntity.ok(formShareService.getByToken(token));
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && (msg.contains("expired") || msg.contains("Invalid"))) {
                 return ResponseEntity.status(HttpStatus.GONE).body(Map.of("error", msg));
             }

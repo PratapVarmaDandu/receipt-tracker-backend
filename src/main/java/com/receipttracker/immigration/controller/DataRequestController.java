@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.service.ProfileDataRequestService;
 import org.slf4j.Logger;
@@ -27,7 +28,7 @@ public class DataRequestController {
         try {
             return ResponseEntity.status(201).body(service.create(id, req));
         } catch (Exception e) {
-            return denied(e.getMessage());
+            return denied(ApiErrors.safeMessage(e));
         }
     }
 
@@ -39,7 +40,7 @@ public class DataRequestController {
             List<ProfileDataRequestDTO> result = service.listForCase(id);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            return denied(e.getMessage());
+            return denied(ApiErrors.safeMessage(e));
         }
     }
 
@@ -50,7 +51,7 @@ public class DataRequestController {
         try {
             return ResponseEntity.ok(service.getPublic(token));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -62,7 +63,7 @@ public class DataRequestController {
         try {
             return ResponseEntity.ok(service.submit(token, req));
         } catch (Exception e) {
-            return denied(e.getMessage());
+            return denied(ApiErrors.safeMessage(e));
         }
     }
 

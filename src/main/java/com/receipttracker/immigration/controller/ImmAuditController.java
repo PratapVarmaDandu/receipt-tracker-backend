@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.CaseAuditDTO;
 import com.receipttracker.immigration.model.GrantScope;
 import com.receipttracker.immigration.service.AuditService;
@@ -51,7 +52,7 @@ public class ImmAuditController {
             return ResponseEntity.ok(audit);
         } catch (Exception e) {
             log.error("!!! getCaseAudit() caseId={}: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 }

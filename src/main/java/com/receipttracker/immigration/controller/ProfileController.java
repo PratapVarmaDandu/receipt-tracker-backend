@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.CanonicalProfileDTO;
 import com.receipttracker.immigration.dto.UpdateProfileRequest;
 import com.receipttracker.immigration.service.CanonicalProfileService;
@@ -28,7 +29,7 @@ public class ProfileController {
             return ResponseEntity.ok(dto);
         } catch (Exception e) {
             log.error("!!! getMe failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -41,7 +42,7 @@ public class ProfileController {
             return ResponseEntity.ok(dto);
         } catch (Exception e) {
             log.error("!!! updateMe failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 }

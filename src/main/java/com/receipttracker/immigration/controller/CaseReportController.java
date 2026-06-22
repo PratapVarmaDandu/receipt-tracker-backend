@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.service.CaseExportService;
 import com.receipttracker.immigration.service.CaseReportService;
 import org.slf4j.Logger;
@@ -34,7 +35,7 @@ public class CaseReportController {
             return denied(e);
         } catch (Exception e) {
             log.error("!!! generateCaseReport: {}", e.getMessage());
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -49,7 +50,7 @@ public class CaseReportController {
             return denied(e);
         } catch (Exception e) {
             log.error("!!! generateTimelinePdf: {}", e.getMessage());
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -78,7 +79,7 @@ public class CaseReportController {
     }
 
     private ResponseEntity<?> denied(RuntimeException e) {
-        String msg = e.getMessage();
+        String msg = ApiErrors.safeMessage(e);
         if (msg != null && msg.startsWith("Access denied")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
         }

@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.CanonicalProfileDTO;
 import com.receipttracker.immigration.dto.CloneCaseRequest;
 import com.receipttracker.immigration.dto.ConflictCheckRequest;
@@ -41,7 +42,7 @@ public class CaseController {
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (RuntimeException e) {
             log.error("!!! create case failed: {}", e.getMessage());
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -62,7 +63,7 @@ public class CaseController {
             return ResponseEntity.ok(cases);
         } catch (RuntimeException e) {
             log.error("!!! list cases failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to load cases"));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         } catch (Exception e) {
             log.error("!!! list cases unexpected error", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -78,7 +79,7 @@ public class CaseController {
             ImmigrationCaseDTO dto = caseService.getById(id);
             return ResponseEntity.ok(dto);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 log.warn("!!! 403 {}", msg);
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
@@ -95,7 +96,7 @@ public class CaseController {
         try {
             return ResponseEntity.ok(caseService.listByOrg(orgId));
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -113,7 +114,7 @@ public class CaseController {
             ImmigrationCaseDTO dto = caseService.updateStatus(id, newStatus);
             return ResponseEntity.ok(dto);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -130,7 +131,7 @@ public class CaseController {
             CanonicalProfileDTO dto = canonicalProfileService.getForCase(id);
             return ResponseEntity.ok(dto);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -149,7 +150,7 @@ public class CaseController {
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .body(resource);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -172,7 +173,7 @@ public class CaseController {
             ImmigrationCaseDTO dto = caseService.assignParalegal(id, memberId);
             return ResponseEntity.ok(dto);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -192,7 +193,7 @@ public class CaseController {
             return ResponseEntity.ok(caseService.getByInviteToken(token));
         } catch (RuntimeException e) {
             log.warn("!!! getByInviteToken failed: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -207,7 +208,7 @@ public class CaseController {
             ImmigrationCaseDTO dto = caseService.acceptInvite(token);
             return ResponseEntity.ok(dto);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             log.warn("!!! acceptInvite failed: {}", msg);
             if (msg != null && msg.startsWith("This invite is not for your account")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
@@ -224,7 +225,7 @@ public class CaseController {
             List<ConflictSummaryDTO> conflicts = caseService.checkConflict(req);
             return ResponseEntity.ok(conflicts);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -241,7 +242,7 @@ public class CaseController {
             FamilyBundleDTO bundle = caseService.getFamily(id);
             return ResponseEntity.ok(bundle);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -258,7 +259,7 @@ public class CaseController {
             ImmigrationCaseDTO dto = caseService.cloneCase(id, req);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }
@@ -275,7 +276,7 @@ public class CaseController {
             List<StatusHistoryDTO> history = caseService.getStatusHistory(id);
             return ResponseEntity.ok(history);
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }

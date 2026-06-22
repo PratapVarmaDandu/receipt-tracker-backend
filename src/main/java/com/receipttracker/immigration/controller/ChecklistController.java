@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.ChecklistItemDTO;
 import com.receipttracker.immigration.dto.GenerateChecklistRequest;
 import com.receipttracker.immigration.dto.UpdateChecklistItemRequest;
@@ -30,7 +31,7 @@ public class ChecklistController {
             List<ChecklistItemDTO> items = service.generate(caseId, req);
             return ResponseEntity.ok(items);
         } catch (Exception e) {
-            return denied(e.getMessage());
+            return denied(ApiErrors.safeMessage(e));
         }
     }
 
@@ -42,7 +43,7 @@ public class ChecklistController {
             List<ChecklistItemDTO> items = service.list(caseId);
             return ResponseEntity.ok(items);
         } catch (Exception e) {
-            return denied(e.getMessage());
+            return denied(ApiErrors.safeMessage(e));
         }
     }
 
@@ -56,7 +57,7 @@ public class ChecklistController {
             ChecklistItemDTO item = service.update(caseId, itemId, req);
             return ResponseEntity.ok(item);
         } catch (Exception e) {
-            return denied(e.getMessage());
+            return denied(ApiErrors.safeMessage(e));
         }
     }
 

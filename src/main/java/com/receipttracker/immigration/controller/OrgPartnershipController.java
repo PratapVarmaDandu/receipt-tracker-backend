@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.service.OrgPartnershipService;
 import org.slf4j.Logger;
@@ -34,7 +35,7 @@ public class OrgPartnershipController {
         try {
             return ResponseEntity.ok(partnershipService.listMine());
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -73,7 +74,7 @@ public class OrgPartnershipController {
         try {
             return ResponseEntity.ok(partnershipService.getOnboardInfo(token));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -89,7 +90,7 @@ public class OrgPartnershipController {
     }
 
     private ResponseEntity<?> denied(RuntimeException e) {
-        String msg = e.getMessage();
+        String msg = ApiErrors.safeMessage(e);
         if (msg != null && msg.startsWith("Access denied")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
         }

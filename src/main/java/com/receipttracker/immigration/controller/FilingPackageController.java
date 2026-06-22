@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.service.FilingPackageService;
 import com.receipttracker.immigration.service.ImmPdfGenerationService;
@@ -29,7 +30,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -40,7 +41,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -53,7 +54,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -66,7 +67,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -79,7 +80,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -92,7 +93,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -107,7 +108,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -124,7 +125,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -137,7 +138,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -159,7 +160,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -172,7 +173,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -186,7 +187,7 @@ public class FilingPackageController {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 }

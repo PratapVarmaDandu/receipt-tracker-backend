@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.UscisStatusDTO;
 import com.receipttracker.immigration.service.UscisPollingService;
 import org.slf4j.Logger;
@@ -42,7 +43,7 @@ public class UscisPollingController {
     }
 
     private ResponseEntity<?> denied(RuntimeException e) {
-        String msg = e.getMessage();
+        String msg = ApiErrors.safeMessage(e);
         if (msg != null && msg.startsWith("Access denied")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
         }

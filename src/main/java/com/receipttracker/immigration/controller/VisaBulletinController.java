@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.service.VisaBulletinService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,7 @@ public class VisaBulletinController {
             return ResponseEntity.ok(bulletinService.getLatest());
         } catch (Exception e) {
             log.error("!!! getLatest: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
@@ -36,7 +37,7 @@ public class VisaBulletinController {
         try {
             return ResponseEntity.ok(bulletinService.getPriorityDateStatus(id));
         } catch (RuntimeException e) {
-            String msg = e.getMessage();
+            String msg = ApiErrors.safeMessage(e);
             if (msg != null && msg.startsWith("Access denied")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
             }

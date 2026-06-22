@@ -1,5 +1,6 @@
 package com.receipttracker.immigration.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.AttorneyProfileDTO;
 import com.receipttracker.immigration.dto.CreateImmOrgRequest;
 import com.receipttracker.immigration.dto.InviteMemberRequest;
@@ -31,7 +32,7 @@ public class ImmOrgController {
             return ResponseEntity.status(HttpStatus.CREATED).body(immOrgService.create(req));
         } catch (RuntimeException e) {
             log.error("!!! create org failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to create organization"));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         } catch (Exception e) {
             log.error("!!! create org unexpected error", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -44,7 +45,7 @@ public class ImmOrgController {
         try {
             return ResponseEntity.ok(immOrgService.listMine());
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to load organizations"));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         } catch (Exception e) {
             log.error("!!! listMine unexpected error", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -96,7 +97,7 @@ public class ImmOrgController {
         try {
             return ResponseEntity.ok(immOrgService.getJoinInfo(token));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Invalid or expired invite link"));
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         } catch (Exception e) {
             log.error("!!! getJoinInfo unexpected error", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -142,7 +143,7 @@ public class ImmOrgController {
     }
 
     private ResponseEntity<?> denied(RuntimeException e) {
-        String msg = e.getMessage();
+        String msg = ApiErrors.safeMessage(e);
         if (msg != null && (msg.startsWith("Access denied") || msg.startsWith("This invite"))) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
         }

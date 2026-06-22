@@ -99,7 +99,8 @@ public class UscisPollingService {
         try {
             pollAndSave(c);
         } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("USCIS poll failed: " + e.getMessage(), e);
+            log.warn("!!! USCIS poll failed for caseId={}: {}", caseId, e.toString());
+            throw new RuntimeException("USCIS status check failed. Please try again later.", e);
         }
 
         return pollRepo.findFirstByCaseIdOrderByPolledAtDesc(caseId)
