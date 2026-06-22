@@ -5,6 +5,7 @@ import com.receipttracker.immigration.dto.AttorneyProfileDTO;
 import com.receipttracker.immigration.dto.CreateImmOrgRequest;
 import com.receipttracker.immigration.dto.InviteMemberRequest;
 import com.receipttracker.immigration.dto.UpdateAttorneyProfileRequest;
+import com.receipttracker.immigration.dto.UpdateImmOrgRequest;
 import com.receipttracker.immigration.service.AttorneyProfileService;
 import com.receipttracker.immigration.service.ImmOrgService;
 import org.slf4j.Logger;
@@ -57,6 +58,16 @@ public class ImmOrgController {
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(immOrgService.getById(id));
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody UpdateImmOrgRequest req) {
+        log.info("PUT /api/immigration/orgs/{}", id);
+        try {
+            return ResponseEntity.ok(immOrgService.update(id, req));
         } catch (RuntimeException e) {
             return denied(e);
         }

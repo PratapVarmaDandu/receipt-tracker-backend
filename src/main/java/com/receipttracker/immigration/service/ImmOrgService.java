@@ -4,6 +4,7 @@ import com.receipttracker.immigration.dto.CreateImmOrgRequest;
 import com.receipttracker.immigration.dto.ImmOrgDTO;
 import com.receipttracker.immigration.dto.ImmOrgMemberDTO;
 import com.receipttracker.immigration.dto.InviteMemberRequest;
+import com.receipttracker.immigration.dto.UpdateImmOrgRequest;
 import com.receipttracker.immigration.model.*;
 import com.receipttracker.immigration.repository.ImmOrgMemberRepository;
 import com.receipttracker.immigration.repository.ImmOrgRepository;
@@ -210,9 +211,36 @@ public class ImmOrgService {
         return toDTO(o, null);
     }
 
+    @Transactional
+    public ImmOrgDTO update(Long id, UpdateImmOrgRequest req) {
+        log.info(">>> update() orgId={}", id);
+        User caller = currentUser();
+        requireOwner(caller, id);
+        ImmOrg org = immOrgRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Org not found: " + id));
+        if (req.name() != null && !req.name().isBlank()) {
+            rejectHtml("name", req.name());
+            org.setName(req.name().trim());
+        }
+        if (req.contactName()  != null) org.setContactName(req.contactName());
+        if (req.contactEmail() != null) org.setContactEmail(req.contactEmail());
+        if (req.address()      != null) org.setAddress(req.address());
+        if (req.city()         != null) org.setCity(req.city());
+        if (req.stateCode()    != null) org.setStateCode(req.stateCode());
+        if (req.zipCode()      != null) org.setZipCode(req.zipCode());
+        if (req.einNumber()    != null) org.setEinNumber(req.einNumber());
+        if (req.website()      != null) org.setWebsite(req.website());
+        ImmOrg saved = immOrgRepo.save(org);
+        log.info("<<< update() orgId={}", saved.getId());
+        return toDTO(saved);
+    }
+
     private ImmOrgDTO toDTO(ImmOrg o, Long myMemberId) {
         return new ImmOrgDTO(o.getId(), o.getName(), o.getOrgType().name(),
-                o.getOwnerUserId(), o.getCreatedAt().toString(), myMemberId);
+                o.getOwnerUserId(), o.getCreatedAt().toString(), myMemberId,
+                o.getContactName(), o.getContactEmail(),
+                o.getAddress(), o.getCity(), o.getStateCode(), o.getZipCode(),
+                o.getEinNumber(), o.getWebsite());
     }
 
     private ImmOrgMemberDTO toMemberDTO(ImmOrgMember m) {
