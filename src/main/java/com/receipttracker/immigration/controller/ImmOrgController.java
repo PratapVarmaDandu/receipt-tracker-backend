@@ -29,9 +29,13 @@ public class ImmOrgController {
         log.info("POST /api/immigration/orgs name={}", req.name());
         try {
             return ResponseEntity.status(HttpStatus.CREATED).body(immOrgService.create(req));
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("!!! create org failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to create organization"));
+        } catch (Exception e) {
+            log.error("!!! create org unexpected error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected error occurred. Please try again."));
         }
     }
 
@@ -39,8 +43,12 @@ public class ImmOrgController {
     public ResponseEntity<?> listMine() {
         try {
             return ResponseEntity.ok(immOrgService.listMine());
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to load organizations"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            log.error("!!! listMine unexpected error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected error occurred. Please try again."));
         }
     }
 
@@ -87,8 +95,12 @@ public class ImmOrgController {
     public ResponseEntity<?> getJoinInfo(@PathVariable String token) {
         try {
             return ResponseEntity.ok(immOrgService.getJoinInfo(token));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Invalid or expired invite link"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            log.error("!!! getJoinInfo unexpected error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected error occurred. Please try again."));
         }
     }
 

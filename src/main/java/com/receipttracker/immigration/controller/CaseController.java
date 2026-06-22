@@ -39,9 +39,17 @@ public class CaseController {
         try {
             ImmigrationCaseDTO dto = caseService.create(req);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("!!! create case failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg != null ? msg : "Failed to create case"));
+        } catch (Exception e) {
+            log.error("!!! create case unexpected error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected error occurred. Please try again."));
         }
     }
 
@@ -52,9 +60,13 @@ public class CaseController {
         try {
             List<ImmigrationCaseDTO> cases = caseService.listAccessible();
             return ResponseEntity.ok(cases);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("!!! list cases failed: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to load cases"));
+        } catch (Exception e) {
+            log.error("!!! list cases unexpected error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected error occurred. Please try again."));
         }
     }
 
@@ -143,7 +155,9 @@ public class CaseController {
             }
             return ResponseEntity.badRequest().body(Map.of("error", msg));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            log.error("!!! downloadProfileDoc unexpected error", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "An unexpected error occurred. Please try again."));
         }
     }
 
