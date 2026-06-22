@@ -1,0 +1,154 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Oracle Free Tier Docker Compose — ARM64 Ampere A1
+#
+# Recommended shape: 2+ OCPU / 4+ GB RAM (still free on Oracle Free Tier).
+# Current tuning targets 1 OCPU / 1 GB — see JAVA_TOOL_OPTIONS + mysql command.
+# To scale up, set in .env:
+#   JAVA_TOOL_OPTIONS=-Xms256m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+#   and raise --innodb-buffer-pool-size=512M in the mysql command below.
+#
+# Usage:
+#   cp .env.oracle.example .env
+#   nano .env                        # fill in real secrets
+#   docker compose -f docker-compose.oracle.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MySQL 8.0 ──────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: receipttracker
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASS}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3306:3306"   # SSH-tunnel access only — not public
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1",
+             "-u", "root", "--password=${MYSQL_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+    # Tuned for 1 OCPU / 1 GB — raise buffer-pool and max-connections when VM has more RAM
+    command: >
+      --innodb-buffer-pool-size=128M
+      --max-connections=25
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --skip-performance-schema
+      --innodb-log-file-size=16M
+      --tmp-table-size=16M
+      --max-heap-table-size=16M
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── Spring Boot backend ────────────────────────────────────────────────────
+  backend:
+    image: ghcr.io/pratapvarmadandu/receipt-tracker-backend:latest
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      # Database — points to the mysql service above
+      DB_URL: "jdbc:mysql://mysql:3306/receipttracker?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+
+      # Google OAuth2
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
+      # Must match the public URL users hit (http or https + domain)
+      FRONTEND_URL: ${FRONTEND_URL}
+
+      # Encryption key for stored AWS credentials (min 32 chars)
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
+
+      # File uploads (persisted in a named volume)
+      UPLOAD_DIR: /app/uploads
+
+      # Tesseract (installed in the backend Docker image)
+      TESSDATA_PATH: /usr/share/tessdata
+
+      # Secure cookies (set true once HTTPS is live; pair with COOKIE_SAME_SITE=none)
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+
+      # Claude Vision AI (optional — leave blank to use Tesseract only)
+      VISION_AI_ENABLED: ${VISION_AI_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      # Gmail SMTP for expense-share emails (optional — prints to log if unset)
+      GMAIL_USERNAME: ${GMAIL_USERNAME:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+
+      # JVM tuned for 1 OCPU / 1 GB. SerialGC has lower overhead than G1GC on a single CPU.
+      # Override in .env for larger VMs:
+      #   JAVA_TOOL_OPTIONS=-Xms256m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+      # To activate New Relic APM, append: -javaagent:/app/newrelic/newrelic.jar
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms64m -Xmx380m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom}
+      SERVER_FORWARD_HEADERS_STRATEGY: FRAMEWORK
+
+      # Reduce Tomcat thread pool and HikariCP connections for 1 GB
+      SERVER_TOMCAT_THREADS_MAX: 20
+      SERVER_TOMCAT_THREADS_MIN_SPARE: 4
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 5
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 2
+
+      # New Relic APM — read from .env; safe to leave blank (agent not loaded when empty)
+      NR_LICENSE_KEY: ${NR_LICENSE_KEY:-}
+      NR_APP_NAME: ${NR_APP_NAME:-steward-prod}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - internal
+    expose:
+      - "8080"
+    deploy:
+      resources:
+        limits:
+          memory: 480m
+
+  # ── Nginx (Angular SPA + reverse proxy) ───────────────────────────────────
+  frontend:
+    image: ghcr.io/pratapvarmadandu/receipt-tracker-frontend:latest
+    restart: always
+    environment:
+      # Injected at container start into /nr-config.js — no rebuild needed when key changes
+      NR_BROWSER_LICENSE_KEY: ${NR_BROWSER_LICENSE_KEY:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Let's Encrypt certificates (created by Certbot on the host)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Certbot ACME challenge webroot
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  mysql_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  internal:
+    driver: bridge
