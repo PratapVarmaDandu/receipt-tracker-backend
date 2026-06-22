@@ -1,0 +1,6 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit real values.
+
+aws_region          = "us-east-1"
+instance_type       = "t2.micro"       # free-tier eligible
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
