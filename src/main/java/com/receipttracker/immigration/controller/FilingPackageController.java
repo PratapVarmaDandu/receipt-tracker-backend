@@ -4,6 +4,8 @@ import com.receipttracker.config.ApiErrors;
 import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.service.FilingPackageService;
 import com.receipttracker.immigration.service.ImmPdfGenerationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,8 @@ import java.util.Map;
 @RestController
 public class FilingPackageController {
 
+    private static final Logger log = LoggerFactory.getLogger(FilingPackageController.class);
+
     @Autowired private FilingPackageService packageService;
     @Autowired private ImmPdfGenerationService pdfGenerationService;
 
@@ -25,22 +29,39 @@ public class FilingPackageController {
     public ResponseEntity<?> createPackage(
             @PathVariable Long caseId,
             @RequestBody CreatePackageRequest req) {
+        long startTime = System.currentTimeMillis();
+        log.info(">>> POST /api/immigration/cases/{}/packages name={} forms={}",
+                caseId, req != null ? req.name() : null, req != null ? req.selectedFormTypes() : null);
         try {
-            return ResponseEntity.ok(packageService.create(caseId, req));
+            ResponseEntity<?> resp = ResponseEntity.ok(packageService.create(caseId, req));
+            log.info("<<< createPackage caseId={} ({} ms)", caseId, System.currentTimeMillis() - startTime);
+            return resp;
         } catch (ResponseStatusException e) {
+            log.warn("!!! createPackage caseId={} rejected: {} ({} ms)",
+                    caseId, e.getReason(), System.currentTimeMillis() - startTime);
             throw e;
         } catch (Exception e) {
+            log.error("!!! createPackage caseId={} failed ({} ms): {}",
+                    caseId, System.currentTimeMillis() - startTime, e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
 
     @GetMapping("/api/immigration/cases/{caseId}/packages")
     public ResponseEntity<?> listPackages(@PathVariable Long caseId) {
+        long startTime = System.currentTimeMillis();
+        log.info(">>> GET /api/immigration/cases/{}/packages", caseId);
         try {
-            return ResponseEntity.ok(packageService.listForCase(caseId));
+            ResponseEntity<?> resp = ResponseEntity.ok(packageService.listForCase(caseId));
+            log.info("<<< listPackages caseId={} ({} ms)", caseId, System.currentTimeMillis() - startTime);
+            return resp;
         } catch (ResponseStatusException e) {
+            log.warn("!!! listPackages caseId={} rejected: {} ({} ms)",
+                    caseId, e.getReason(), System.currentTimeMillis() - startTime);
             throw e;
         } catch (Exception e) {
+            log.error("!!! listPackages caseId={} failed ({} ms): {}",
+                    caseId, System.currentTimeMillis() - startTime, e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
