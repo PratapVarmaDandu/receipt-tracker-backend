@@ -123,6 +123,23 @@ public class CaseController {
         }
     }
 
+    /** Set or update the USCIS receipt number. Attorney + WRITE_CASE grant required. */
+    @PutMapping("/{id}/receipt-number")
+    public ResponseEntity<?> updateReceiptNumber(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        log.info("PUT /api/immigration/cases/{}/receipt-number", id);
+        try {
+            ImmigrationCaseDTO dto = caseService.updateReceiptNumber(id, body.get("receiptNumber"));
+            return ResponseEntity.ok(dto);
+        } catch (RuntimeException e) {
+            String msg = ApiErrors.safeMessage(e);
+            if (msg != null && msg.startsWith("Access denied")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            log.error("!!! updateReceiptNumber failed: {}", msg);
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
     /** Returns the beneficiary's canonical profile. Requires READ_CASE grant (attorney / HR admin). */
     @GetMapping("/{id}/beneficiary/profile")
     public ResponseEntity<?> getBeneficiaryProfile(@PathVariable Long id) {

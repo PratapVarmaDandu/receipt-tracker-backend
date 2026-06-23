@@ -275,6 +275,65 @@ public class CaseService {
         return toDTO(saved, user);
     }
 
+    @Transactional
+    public ImmigrationCaseDTO updateReceiptNumber(Long caseId, String receiptNumber) {
+        log.info(">>> updateReceiptNumber() caseId={}", caseId);
+        User user = currentUser();
+        permissionService.requireAccess(user, caseId, GrantScope.WRITE_CASE);
+
+        ImmigrationCase c = caseRepo.findById(caseId)
+                .orElseThrow(() -> new RuntimeException("Case not found: " + caseId));
+        requireAttorneyInFirm(user, c);
+
+        if (c.getStatus().ordinal() < CaseStatus.PETITION_FILED.ordinal()) {
+            throw new RuntimeException("Receipt number can only be added after petition is filed");
+        }
+        if (receiptNumber == null || receiptNumber.isBlank()) {
+            throw new RuntimeException("Receipt number is required");
+        }
+        String trimmed = receiptNumber.trim().toUpperCase();
+        if (!trimmed.matches("[A-Z]{3}\\d{10,13}")) {
+            throw new RuntimeException("Invalid receipt number format (expected e.g. EAC2490012345)");
+        }
+
+        c.setReceiptNumber(trimmed);
+        ImmigrationCase saved = caseRepo.save(c);
+
+        // App-level alert — visible to all case participants in activity feed
+        auditService.append(saved, user, "RECEIPT_NUMBER_ADDED",
+                "{\"receiptNumber\":\"" + trimmed + "\"}", FeedVisibility.ALL);
+
+        auditService.appendCaseEvent(caseId, "ImmigrationCase", caseId, "receiptNumber",
+                "CHANGED", "direct_edit",
+                "{\"value\":\"" + trimmed + "\"}", user.getId());
+
+        // Email alerts — beneficiary and employer contact
+        String caseLabel = saved.getCaseNumber() != null ? saved.getCaseNumber() : "Case #" + caseId;
+        String subject = "USCIS Receipt Number Added — " + caseLabel;
+        String body = "Your attorney has recorded the USCIS receipt number for " + caseLabel + ".\n\n"
+                + "Receipt Number: " + trimmed + "\n\n"
+                + "USCIS will now be checked daily for status updates. "
+                + "You will be notified when a status change is detected.\n\n"
+                + "Log in to the portal to view case details.";
+
+        if (saved.getBeneficiary() != null && saved.getBeneficiary().getUser() != null) {
+            String beneficiaryEmail = saved.getBeneficiary().getUser().getEmail();
+            if (beneficiaryEmail != null && !beneficiaryEmail.startsWith("PENDING_")) {
+                emailService.sendSimpleEmail(beneficiaryEmail, subject, body);
+            }
+        }
+        if (saved.getEmployerImmOrgId() != null) {
+            immOrgRepo.findById(saved.getEmployerImmOrgId()).ifPresent(org -> {
+                if (org.getContactEmail() != null) {
+                    emailService.sendSimpleEmail(org.getContactEmail(), subject, body);
+                }
+            });
+        }
+
+        log.info("<<< updateReceiptNumber() caseId={} receiptNumber={}", caseId, trimmed);
+        return toDTO(saved, user);
+    }
+
     @Transactional(readOnly = true)
     public List<ImmigrationCaseDTO> listByOrg(Long orgId) {
         log.info(">>> listByOrg() orgId={}", orgId);
