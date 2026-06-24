@@ -41,10 +41,11 @@ public class UscisPollingService {
 
     private static final Logger log = LoggerFactory.getLogger(UscisPollingService.class);
 
-    private static final String USCIS_URL = "https://egov.uscis.gov/casestatus/landing.do";
-    // Matches "Case Was Received", "Case Is Being Actively Reviewed By USCIS", etc.
-    private static final Pattern STATUS_PATTERN =
-            Pattern.compile("(?i)<h4[^>]*>\\s*(Case\\s[^<]{3,200})\\s*</h4>");
+    private static final String USCIS_FORM_URL = "https://egov.uscis.gov/casestatus/landing.do";
+
+    // Find <h4> content (DOTALL covers inner newlines); inner tags are stripped before matching.
+    private static final Pattern H4_PATTERN =
+            Pattern.compile("(?i)<h4[^>]*>(.*?)</h4>", Pattern.DOTALL);
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
@@ -122,8 +123,9 @@ public class UscisPollingService {
     /** Returns true if the status changed compared to the previous poll. */
     private boolean pollAndSave(ImmigrationCase c) throws IOException, InterruptedException {
         String receiptNumber = c.getReceiptNumber();
-        String html = fetchHtml(receiptNumber);
-        String detectedStatus = parseStatus(html);
+        String[] statusAndRaw = fetchStatusAndRaw(receiptNumber);
+        String detectedStatus = statusAndRaw[0];
+        String raw = statusAndRaw[1];
 
         Optional<UscisPollResult> previous = pollRepo.findFirstByCaseIdOrderByPolledAtDesc(c.getId());
         boolean changed = previous
@@ -134,7 +136,7 @@ public class UscisPollingService {
         UscisPollResult result = new UscisPollResult();
         result.setCaseId(c.getId());
         result.setPolledAt(LocalDateTime.now());
-        result.setRawStatusText(html.length() > 4000 ? html.substring(0, 4000) : html);
+        result.setRawStatusText(raw.length() > 4000 ? raw.substring(0, 4000) : raw);
         result.setDetectedStatus(detectedStatus);
         result.setStatusChanged(changed);
         pollRepo.save(result);
@@ -150,22 +152,39 @@ public class UscisPollingService {
         return changed;
     }
 
+    /** Returns [detectedStatus, rawResponseText] from the USCIS HTML form. */
+    private String[] fetchStatusAndRaw(String receiptNumber) throws IOException, InterruptedException {
+        String html = fetchHtml(receiptNumber);
+        return new String[]{parseStatusFromHtml(html), html};
+    }
+
     private String fetchHtml(String receiptNumber) throws IOException, InterruptedException {
         String body = "appReceiptNum=" + URLEncoder.encode(receiptNumber, StandardCharsets.UTF_8)
                 + "&caseStatusSearchBtn=CHECK+STATUS";
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(USCIS_URL))
+                .uri(URI.create(USCIS_FORM_URL))
                 .timeout(Duration.ofSeconds(15))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("User-Agent", "Mozilla/5.0 (compatible; ImmCaseTracker/1.0)")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Accept", "text/html,application/xhtml+xml")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString()).body();
     }
 
-    private String parseStatus(String html) {
-        Matcher m = STATUS_PATTERN.matcher(html);
-        return m.find() ? m.group(1).trim() : "Unknown";
+    /** Strips inner HTML tags from each &lt;h4&gt; and returns the first that starts with "case". */
+    private String parseStatusFromHtml(String html) {
+        Matcher m = H4_PATTERN.matcher(html);
+        while (m.find()) {
+            String text = m.group(1)
+                    .replaceAll("(?s)<[^>]+>", " ")
+                    .replaceAll("\\s+", " ")
+                    .trim();
+            if (text.length() >= 5 && text.toLowerCase().startsWith("case")) {
+                return text;
+            }
+        }
+        return "Unknown";
     }
 
     private void createSystemTimelineEvent(ImmigrationCase c, String newStatus) {
