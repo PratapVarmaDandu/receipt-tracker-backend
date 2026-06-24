@@ -28,7 +28,7 @@ public class UscisPollResult {
     @Column(name = "raw_status_text", columnDefinition = "TEXT")
     private String rawStatusText;
 
-    @Column(name = "detected_status", length = 50)
+    @Column(name = "detected_status", length = 500)
     private String detectedStatus;
 
     @Column(name = "status_changed", nullable = false)
