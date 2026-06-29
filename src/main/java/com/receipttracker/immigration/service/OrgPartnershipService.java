@@ -145,8 +145,11 @@ public class OrgPartnershipService {
         String onboardUrl = frontendUrl + "/immigration/employer/onboard/" + token;
         try {
             emailService.sendImmPartnershipInvite(req.employerEmail(), lawFirmName, onboardUrl);
+            log.info("IMM_EMPLOYER_INVITE email sent lawFirmOrgId={} email={}", req.lawFirmOrgId(), req.employerEmail());
         } catch (Exception e) {
-            log.warn("IMM_EMPLOYER_INVITE email failed lawFirmOrgId={} email={}: {}", req.lawFirmOrgId(), req.employerEmail(), e.getMessage());
+            // Non-fatal, but capture the full exception (stack trace) so SMTP / send failures are traceable.
+            log.error("IMM_EMPLOYER_INVITE email failed (non-fatal) lawFirmOrgId={} email={}",
+                    req.lawFirmOrgId(), req.employerEmail(), e);
         }
         return enrichDTO(saved);
     }
