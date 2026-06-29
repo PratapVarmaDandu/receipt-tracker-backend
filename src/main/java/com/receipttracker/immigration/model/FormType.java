@@ -11,7 +11,8 @@ public enum FormType {
     I539("I-539 Application to Extend/Change Nonimmigrant Status"),
     G28("G-28 Notice of Entry of Appearance as Attorney"),
     I290B("I-290B Notice of Appeal or Motion"),
-    I693("I-693 Report of Immigration Medical Examination");
+    I693("I-693 Report of Immigration Medical Examination"),
+    PERM("PERM Labor Certification (ETA-9089)");
 
     public final String displayName;
     FormType(String displayName) { this.displayName = displayName; }

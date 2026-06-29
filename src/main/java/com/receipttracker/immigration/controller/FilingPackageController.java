@@ -38,7 +38,7 @@ public class FilingPackageController {
             return resp;
         } catch (ResponseStatusException e) {
             log.warn("!!! createPackage caseId={} rejected: {} ({} ms)",
-                    caseId, e.getReason(), System.currentTimeMillis() - startTime);
+                    caseId, e.getReason(), System.currentTimeMillis() - startTime, e);
             throw e;
         } catch (Exception e) {
             log.error("!!! createPackage caseId={} failed ({} ms): {}",
@@ -62,6 +62,17 @@ public class FilingPackageController {
         } catch (Exception e) {
             log.error("!!! listPackages caseId={} failed ({} ms): {}",
                     caseId, System.currentTimeMillis() - startTime, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
+        }
+    }
+
+    @GetMapping("/api/immigration/cases/{caseId}/my-questionnaires")
+    public ResponseEntity<?> myQuestionnaires(@PathVariable Long caseId) {
+        try {
+            return ResponseEntity.ok(packageService.getMyQuestionnaires(caseId));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }
