@@ -75,8 +75,8 @@ public class FormMappingService {
             case I131  -> mapI131(p);
             case I140  -> mapI140(p);
             case I539  -> mapI539(p);
-            // G-28, I-290B, I-693: no beneficiary profile fields map directly; return empty
-            case G28, I290B, I693 -> new LinkedHashMap<>();
+            // G-28, I-290B, I-693, PERM: no beneficiary profile fields map directly; return empty
+            case G28, I290B, I693, PERM -> new LinkedHashMap<>();
         };
     }
 
@@ -90,7 +90,7 @@ public class FormMappingService {
             case I131  -> I131_REQUIRED;
             case I140  -> I140_REQUIRED;
             case I539  -> I539_REQUIRED;
-            case G28, I290B, I693 -> List.of();
+            case G28, I290B, I693, PERM -> List.of();
         };
         if (required.isEmpty()) return 0;
         long filled = required.stream()

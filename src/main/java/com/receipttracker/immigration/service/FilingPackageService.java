@@ -145,7 +145,40 @@ public class FilingPackageService {
             questionnaires.add(questionnaireRepo.save(q));
         }
 
+        // Notify the beneficiary that a package is ready for them to review + complete.
+        // Non-fatal — if SMTP is not configured EmailService logs a WARN and the in-app
+        // surface still gives them a way in.
+        notifyBeneficiaryPackageReady(immCase, pkg, questionnaires);
+
         return toDTO(pkg, questionnaires, questions, resolved);
+    }
+
+    /** Emails the beneficiary their questionnaire link when a package is created. */
+    private void notifyBeneficiaryPackageReady(ImmigrationCase immCase, FilingPackage pkg,
+                                               List<FilingPackageQuestionnaire> questionnaires) {
+        FilingPackageQuestionnaire beneficiaryQ = questionnaires.stream()
+                .filter(q -> "BENEFICIARY".equals(q.getTargetRelationship()))
+                .findFirst().orElse(null);
+        if (beneficiaryQ == null) return;
+        if (immCase.getBeneficiary() == null || immCase.getBeneficiary().getUser() == null) return;
+
+        String email = immCase.getBeneficiary().getUser().getEmail();
+        String name = immCase.getBeneficiary().getUser().getName();
+        if (email == null || email.isBlank()) return;
+
+        String link = frontendUrl + "/immigration/packages/questionnaire/" + beneficiaryQ.getToken();
+        try {
+            emailService.sendSimpleEmail(email,
+                    "Action needed: review your filing details — " + pkg.getName(),
+                    "Hi " + (name != null ? name : "there") + ",\n\n"
+                    + "Your attorney has prepared the filing package \"" + pkg.getName()
+                    + "\". Please review the details that have already been filled in, complete any "
+                    + "remaining questions, and submit:\n" + link
+                    + "\n\nYou can also open it any time from your case in the app. This link expires in 30 days.");
+            log.info("Package-ready email sent to beneficiary {}", email);
+        } catch (Exception e) {
+            log.warn("Package-ready beneficiary email failed (non-fatal): {}", e.getMessage());
+        }
     }
 
     // ── List packages for a case ──────────────────────────────────────────────
@@ -183,6 +216,58 @@ public class FilingPackageService {
         List<FilingPackageAnswer> answers = answerRepo.findByFilingPackageId(pkg.getId());
         Map<String, ResolvedValue> resolved = answersToResolvedMap(answers);
         return toDTO(pkg, qs, questions, resolved);
+    }
+
+    // ── My questionnaires (caller-scoped) ─────────────────────────────────────
+
+    /**
+     * Returns only the PENDING questionnaires the caller is responsible for, scoped to
+     * their own relationship on the case. A beneficiary only ever receives their own
+     * BENEFICIARY token — never the employer/attorney ones — so the token cannot be used
+     * to submit another party's questionnaire.
+     */
+    @Transactional(readOnly = true)
+    public List<MyQuestionnaireDTO> getMyQuestionnaires(Long caseId) {
+        User caller = currentUser();
+        permissionService.requireAccess(caller, caseId, GrantScope.READ_CASE);
+
+        ImmigrationCase immCase = caseRepo.findById(caseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Case not found"));
+
+        String target = callerTargetRelationship(immCase, caller);
+        if (target == null) return List.of();
+
+        List<MyQuestionnaireDTO> result = new ArrayList<>();
+        for (FilingPackage pkg : packageRepo.findByCaseIdOrderByCreatedAtDesc(caseId)) {
+            Map<String, ResolvedValue> resolved = answersToResolvedMap(
+                    answerRepo.findByFilingPackageId(pkg.getId()));
+            for (FilingPackageQuestionnaire q : questionnaireRepo.findByFilingPackageId(pkg.getId())) {
+                if (!target.equals(q.getTargetRelationship())) continue;
+                if (!"PENDING".equals(q.getStatus())) continue;
+                List<String> keys = parseStringList(q.getQuestionnaireSpecJson());
+                int answered = (int) keys.stream()
+                        .filter(k -> resolved.getOrDefault(k, ResolvedValue.none()).hasValue())
+                        .count();
+                result.add(new MyQuestionnaireDTO(
+                        q.getId(), pkg.getId(), pkg.getName(), q.getTargetRelationship(),
+                        q.getToken(), q.getStatus(), keys.size(), answered, q.getExpiresAt()));
+            }
+        }
+        return result;
+    }
+
+    /** Maps the caller to the questionnaire targetRelationship they own on this case. */
+    private String callerTargetRelationship(ImmigrationCase c, User caller) {
+        if (c.getBeneficiary() != null && c.getBeneficiary().getUser() != null
+                && caller.getId().equals(c.getBeneficiary().getUser().getId())) {
+            return "BENEFICIARY";
+        }
+        List<Long> orgIds = orgMemberRepo
+                .findByUserIdAndStatus(caller.getId(), ImmOrgMemberStatus.ACTIVE)
+                .stream().map(ImmOrgMember::getImmOrgId).toList();
+        if (c.getLawFirmImmOrgId() != null && orgIds.contains(c.getLawFirmImmOrgId())) return "ATTORNEY";
+        if (c.getEmployerImmOrgId() != null && orgIds.contains(c.getEmployerImmOrgId())) return "EMPLOYER";
+        return null;
     }
 
     // ── Send questionnaires ───────────────────────────────────────────────────
@@ -654,14 +739,14 @@ public class FilingPackageService {
                 }
             }
             case "ATTORNEY" -> {
-                if (immCase.getAssignedAttorneyMemberId() == null)
-                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No attorney assigned to this case");
-                String expected = orgMemberRepo.findById(immCase.getAssignedAttorneyMemberId())
-                        .map(ImmOrgMember::getEmail)
-                        .orElse(null);
-                if (expected == null || !expected.equalsIgnoreCase(callerEmail))
+                // The attorney is an authenticated app user whose authority is expressed as a
+                // grant on the case (the law firm org holds all scopes). Matching a single
+                // assignedAttorneyMemberId email is too brittle — it breaks when the member row
+                // stores a different/blank email or when another firm attorney/paralegal submits.
+                // Authorize anyone with form-editing access on the case instead.
+                if (!permissionService.canAccess(caller, immCase.getId(), GrantScope.WRITE_FORMS))
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                            "This questionnaire is not for your account");
+                            "You do not have form-editing access on this case");
             }
             // Fail closed: an unrecognized target relationship must never bypass validation.
             default -> throw new ResponseStatusException(HttpStatus.FORBIDDEN,
