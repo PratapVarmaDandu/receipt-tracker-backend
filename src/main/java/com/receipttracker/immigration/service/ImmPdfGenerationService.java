@@ -14,6 +14,7 @@ import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
 import com.receipttracker.service.EncryptionService;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -361,6 +362,11 @@ public class ImmPdfGenerationService {
             }
             PDAcroForm acroForm = doc.getDocumentCatalog().getAcroForm();
             if (acroForm != null && mapping.getSections() != null) {
+                // USCIS forms are hybrid XFA/AcroForm. Adobe (and many viewers) render the XFA
+                // layer, which keeps showing the original empty values even after we fill the
+                // AcroForm fields — so the output looks blank. Remove XFA so the filled AcroForm
+                // is what renders. (setValue already generates the appearance streams flatten() bakes in.)
+                acroForm.getCOSObject().removeItem(COSName.XFA);
                 for (FormSectionMapping section : mapping.getSections().values()) {
                     if (section.getFields() == null) continue;
                     for (FormFieldEntry entry : section.getFields()) {

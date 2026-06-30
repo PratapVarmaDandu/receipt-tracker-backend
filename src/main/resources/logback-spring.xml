@@ -15,7 +15,7 @@
        in the Oracle compose, /opt/logs is bind-mounted from the host.
        Each hour rolls to backend-YYYY-MM-DD-HH.log. No maxHistory: files are
        purged manually. Uncomment <totalSizeCap> for a safety ceiling. -->
-  <springProfile name="prod">
+  <springProfile name="prod,test">
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
       <file>${LOG_PATH:-/opt/logs}/backend.log</file>
       <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -34,8 +34,8 @@
     </root>
   </springProfile>
 
-  <!-- Non-prod (local / local-mysql / test): console only, no /opt/logs writes -->
-  <springProfile name="!prod">
+  <!-- Local only (local / local-mysql): console only, no log-file writes -->
+  <springProfile name="!prod &amp; !test">
     <root level="INFO">
       <appender-ref ref="CONSOLE"/>
     </root>
