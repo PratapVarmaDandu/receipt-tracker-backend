@@ -3,6 +3,7 @@ package com.receipttracker.immigration.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.receipttracker.config.StoragePathResolver;
+import com.receipttracker.immigration.dto.FieldSpecDTO;
 import com.receipttracker.immigration.dto.FormVersionAuditEventDTO;
 import com.receipttracker.immigration.dto.FormVersionDTO;
 import com.receipttracker.immigration.dto.MappingBuilderDTO;
@@ -374,6 +375,54 @@ public class FormVersionService {
 
     private String sanitizeFieldName(String questionKey) {
         return questionKey.replaceAll("[^A-Za-z0-9]", "_");
+    }
+
+    /**
+     * The field-name spec for a form type: which AcroForm field name to use for each canonical
+     * question. A form designer names the replica's fields to these and the pipeline does the rest.
+     * Generic across all forms.
+     */
+    @Transactional(readOnly = true)
+    public List<FieldSpecDTO> getFieldSpec(String formType) {
+        requireAttorneyOrOwner(currentUser());
+        if (formType == null || formType.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "formType is required");
+        String ft = formType.trim();
+        try {
+            FormType.valueOf(ft);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown form type: '" + ft + "'");
+        }
+        return questionRegistry.getQuestionsForForms(List.of(ft)).stream()
+            .map(q -> new FieldSpecDTO(
+                    sanitizeFieldName(q.getKey()), q.getKey(), q.getLabel(), q.getOwner(),
+                    q.getFriendlySection(), CanonicalQuestionRegistry.sectionLabel(q.getFriendlySection()),
+                    q.getType(), q.isRequired()))
+            .toList();
+    }
+
+    /**
+     * Auto-map a version by convention: pair each canonical question to a PDF field whose name
+     * equals the sanitized question key. Lets a correctly-named replica (built to the field spec)
+     * map in one click. Generic across all forms.
+     */
+    public FormVersionDTO autoMapByFieldName(Long id) {
+        requireAttorneyOrOwner(currentUser());
+        FormVersion fv = versionRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Form version not found"));
+
+        Set<String> pdfFields = new HashSet<>(pdfFieldNamesForVersion(fv));
+        Map<String, String> pairs = new LinkedHashMap<>();
+        for (CanonicalQuestion q : questionRegistry.getQuestionsForForms(List.of(fv.getFormType()))) {
+            String name = sanitizeFieldName(q.getKey());
+            if (pdfFields.contains(name)) pairs.put(q.getKey(), name);
+        }
+        if (pairs.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "No PDF fields matched the expected names. Name the replica's fields per the field "
+                + "spec (field name == sanitized question key), or use the point-and-click builder.");
+        }
+        return saveMapping(id, pairs);
     }
 
     private FormFieldMapping buildMapping(String formType, List<CanonicalQuestion> questions,

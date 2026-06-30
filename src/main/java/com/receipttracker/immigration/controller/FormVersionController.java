@@ -50,6 +50,26 @@ public class FormVersionController {
         }
     }
 
+    @GetMapping("/api/immigration/form-versions/field-spec")
+    public ResponseEntity<?> fieldSpec(@RequestParam String formType) {
+        try {
+            return ResponseEntity.ok(formVersionService.getFieldSpec(formType));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Failed"));
+        }
+    }
+
+    @PostMapping("/api/immigration/form-versions/{id}/auto-map")
+    public ResponseEntity<?> autoMap(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(formVersionService.autoMapByFieldName(id));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Failed"));
+        }
+    }
+
     @GetMapping("/api/immigration/form-versions/{id}/mapping-builder")
     public ResponseEntity<?> mappingBuilder(@PathVariable Long id) {
         try {
