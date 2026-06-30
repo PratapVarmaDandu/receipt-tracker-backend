@@ -22,6 +22,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
+import org.apache.pdfbox.pdmodel.interactive.form.PDTerminalField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -306,7 +307,7 @@ public class FormVersionService {
             .toList();
 
         return new MappingBuilderDTO(fv.getId(), fv.getFormType(),
-                parsePdfFieldNames(fv), questions, flattenMapping(fv));
+                pdfFieldNamesForVersion(fv), questions, flattenMapping(fv));
     }
 
     /** Persists a questionKey → pdfFieldName mapping authored in the builder and verifies it. */
@@ -534,15 +535,42 @@ public class FormVersionService {
         try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
             PDAcroForm acroForm = doc.getDocumentCatalog().getAcroForm();
             if (acroForm == null) return List.of();
-            return acroForm.getFields().stream()
-                .map(PDField::getFullyQualifiedName)
-                .filter(Objects::nonNull)
-                .sorted()
-                .toList();
+            // getFields() returns only top-level/root fields. USCIS forms nest every fillable
+            // field under a single root container (e.g. "form1[0]"), so walk the full field tree
+            // and keep terminal (fillable) fields — otherwise only the root container is captured.
+            List<String> names = new ArrayList<>();
+            Iterator<PDField> it = acroForm.getFieldIterator();
+            while (it.hasNext()) {
+                PDField f = it.next();
+                if (f instanceof PDTerminalField && f.getFullyQualifiedName() != null) {
+                    names.add(f.getFullyQualifiedName());
+                }
+            }
+            return names.stream().distinct().sorted().toList();
         } catch (Exception e) {
             log.warn("Could not extract AcroForm fields from PDF: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * Field names for the builder, re-extracted live from the stored PDF so versions uploaded
+     * before the tree-walking fix show their real fields without a re-upload; falls back to the
+     * names captured at upload time.
+     */
+    private List<String> pdfFieldNamesForVersion(FormVersion fv) {
+        if (fv.getPdfStorageKey() != null) {
+            try {
+                Path p = storagePathResolver.asPath().resolve(fv.getPdfStorageKey());
+                if (Files.exists(p)) {
+                    List<String> live = extractPdfFields(Files.readAllBytes(p));
+                    if (!live.isEmpty()) return live;
+                }
+            } catch (Exception e) {
+                log.warn("Live field re-extraction failed for version {}: {}", fv.getId(), e.getMessage());
+            }
+        }
+        return parsePdfFieldNames(fv);
     }
 
     private String storePdf(String formType, String edition, byte[] pdfBytes) {
