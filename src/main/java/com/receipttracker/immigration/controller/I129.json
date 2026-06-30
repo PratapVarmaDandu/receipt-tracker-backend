@@ -1,0 +1,60 @@
+{
+  "formType": "I129",
+  "sections": {
+    "part1_petitioner": {
+      "owner": "EMPLOYER",
+      "fields": [
+        { "questionKey": "employer.legalName",    "pdfFieldName": "Pt1Line1_LegalName" },
+        { "questionKey": "employer.ein",           "pdfFieldName": "Pt1Line4a_EIN" },
+        { "questionKey": "employer.addressLine1",  "pdfFieldName": "Pt1Line7_StreetNumber" },
+        { "questionKey": "employer.city",          "pdfFieldName": "Pt1Line7_City" },
+        { "questionKey": "employer.state",         "pdfFieldName": "Pt1Line7_State" },
+        { "questionKey": "employer.zipCode",       "pdfFieldName": "Pt1Line7_ZipCode" },
+        { "questionKey": "employer.phone",         "pdfFieldName": "Pt1Line10_DaytimePhone" },
+        { "questionKey": "employer.website",       "pdfFieldName": "Pt1Line12_Website" }
+      ]
+    },
+    "part3_beneficiary": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        { "questionKey": "beneficiary.lastName",        "pdfFieldName": "Pt3Line1_FamilyName" },
+        { "questionKey": "beneficiary.firstName",       "pdfFieldName": "Pt3Line1_GivenName" },
+        { "questionKey": "beneficiary.middleName",      "pdfFieldName": "Pt3Line1_MiddleName" },
+        { "questionKey": "beneficiary.dateOfBirth",     "pdfFieldName": "Pt3Line3_DateOfBirth" },
+        { "questionKey": "beneficiary.countryOfBirth",  "pdfFieldName": "Pt3Line4_CountryOfBirth" },
+        { "questionKey": "beneficiary.citizenshipCountry", "pdfFieldName": "Pt3Line5_CountryOfCitizenship" },
+        { "questionKey": "beneficiary.passportNumber",  "pdfFieldName": "Pt3Line6_PassportNumber" },
+        { "questionKey": "beneficiary.passportCountry", "pdfFieldName": "Pt3Line7_PassportIssuedBy" },
+        { "questionKey": "beneficiary.passportIssueDate", "pdfFieldName": "Pt3Line8_PassportIssueDate" },
+        { "questionKey": "beneficiary.passportExpiryDate", "pdfFieldName": "Pt3Line9_PassportExpDate" },
+        { "questionKey": "beneficiary.i94Number",       "pdfFieldName": "Pt3Line11_I94Number" },
+        { "questionKey": "beneficiary.currentVisaType", "pdfFieldName": "Pt3Line12a_StatusVisaClass" },
+        { "questionKey": "beneficiary.currentVisaExpiry", "pdfFieldName": "Pt3Line12b_StatusExpDate" },
+        { "questionKey": "beneficiary.addressLine1",    "pdfFieldName": "Pt3Line14_StreetNumber" },
+        { "questionKey": "beneficiary.addressCity",     "pdfFieldName": "Pt3Line14_City" },
+        { "questionKey": "beneficiary.addressState",    "pdfFieldName": "Pt3Line14_State" },
+        { "questionKey": "beneficiary.addressZip",      "pdfFieldName": "Pt3Line14_ZipCode" },
+        { "questionKey": "beneficiary.phone",           "pdfFieldName": "Pt3Line16_DaytimePhone" },
+        { "questionKey": "beneficiary.uscisAccountNumber", "pdfFieldName": "Pt3Line20_USCISAccountNumber" }
+      ]
+    },
+    "part5_job": {
+      "owner": "EMPLOYER",
+      "fields": [
+        { "questionKey": "job.title",        "pdfFieldName": "Pt5Line1_JobTitle" },
+        { "questionKey": "job.socCode",      "pdfFieldName": "Pt5Line2_SOCCode" },
+        { "questionKey": "job.startDate",    "pdfFieldName": "Pt5Line7_StartDate" },
+        { "questionKey": "job.salaryAmount", "pdfFieldName": "Pt5Line9a_WageAmount" },
+        { "questionKey": "job.hoursPerWeek", "pdfFieldName": "Pt5Line8_HoursPerWeek" }
+      ]
+    },
+    "part6_attorney": {
+      "owner": "ATTORNEY",
+      "fields": [
+        { "questionKey": "attorney.barNumber", "pdfFieldName": "Pt6Line4_StateBarNumber" },
+        { "questionKey": "attorney.firmName",  "pdfFieldName": "Pt6Line2_FirmOrganizationName" },
+        { "questionKey": "attorney.email",     "pdfFieldName": "Pt6Line8_Email" }
+      ]
+    }
+  }
+}

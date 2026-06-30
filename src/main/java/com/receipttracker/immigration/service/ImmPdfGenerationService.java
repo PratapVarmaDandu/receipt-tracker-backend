@@ -349,6 +349,12 @@ public class ImmPdfGenerationService {
         FormFieldMapping mapping = mappingOpt.get();
 
         try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
+            // USCIS form PDFs carry an encryption dictionary (owner-permissions, no password —
+            // form-fill is allowed). PDFBox refuses to save such a document unless security is
+            // cleared, so strip it before filling/flattening/saving.
+            if (doc.isEncrypted()) {
+                doc.setAllSecurityToBeRemoved(true);
+            }
             PDAcroForm acroForm = doc.getDocumentCatalog().getAcroForm();
             if (acroForm != null && mapping.getSections() != null) {
                 for (FormSectionMapping section : mapping.getSections().values()) {
