@@ -155,8 +155,15 @@ public class FilingPackageController {
             boolean override = req != null && req.overridePendingReview();
             return ResponseEntity.ok(pdfGenerationService.generatePacket(caseId, packageId, override));
         } catch (ResponseStatusException e) {
-            throw e;
+            // Surface the actual blocking reason (preflight failure / PENDING_REVIEW_EXISTS) to the
+            // client in the body, preserving the original status — the frontend reads `error.error`
+            // to show the message and to detect the PENDING_REVIEW override prompt.
+            String reason = e.getReason() != null ? e.getReason() : "PDF generation failed";
+            log.warn("!!! generatePdf caseId={} packageId={} rejected ({}): {}",
+                    caseId, packageId, e.getStatusCode(), reason);
+            return ResponseEntity.status(e.getStatusCode()).body(Map.of("error", reason));
         } catch (Exception e) {
+            log.error("!!! generatePdf caseId={} packageId={} failed: {}", caseId, packageId, e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", ApiErrors.safeMessage(e)));
         }
     }

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -36,5 +37,20 @@ public class FormVersionController {
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file) {
         return ResponseEntity.ok(formVersionService.uploadMapping(id, file));
+    }
+
+    @PostMapping(value = "/api/immigration/form-versions",
+                 consumes = "multipart/form-data")
+    public ResponseEntity<?> createManual(
+            @RequestParam("formType") String formType,
+            @RequestParam("editionDate") String editionDate,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            return ResponseEntity.ok(formVersionService.createManualVersion(formType, editionDate, file));
+        } catch (ResponseStatusException e) {
+            // Surface the validation reason (duplicate / not-a-PDF / no fillable fields) to the UI.
+            String reason = e.getReason() != null ? e.getReason() : "Upload failed";
+            return ResponseEntity.status(e.getStatusCode()).body(Map.of("error", reason));
+        }
     }
 }

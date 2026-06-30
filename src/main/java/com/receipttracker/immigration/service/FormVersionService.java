@@ -205,6 +205,87 @@ public class FormVersionService {
         }
     }
 
+    /**
+     * Manually create a PENDING_REVIEW form version by uploading the fillable PDF directly,
+     * bypassing the monthly USCIS scraper. Lets an ATTORNEY/OWNER bootstrap a form (e.g. I-129)
+     * so they can then upload the field mapping and approve it — required for PDF generation in
+     * environments where the scheduler has never run. Extracts AcroForm field names via PDFBox,
+     * same as the scheduler path.
+     */
+    public FormVersionDTO createManualVersion(String formType, String editionDate, MultipartFile pdf) {
+        User caller = currentUser();
+        requireAttorneyOrOwner(caller);
+
+        if (formType == null || formType.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "formType is required");
+        String ft = formType.trim();
+        try {
+            FormType.valueOf(ft);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown form type: '" + ft + "'");
+        }
+        if (editionDate == null || editionDate.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "editionDate is required");
+        String edition = editionDate.trim();
+        if (pdf == null || pdf.isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A PDF file is required");
+
+        byte[] pdfBytes;
+        try {
+            pdfBytes = pdf.getBytes();
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not read the uploaded file");
+        }
+        // Validate PDF magic bytes
+        if (pdfBytes.length < 5 || pdfBytes[0] != '%' || pdfBytes[1] != 'P'
+                || pdfBytes[2] != 'D' || pdfBytes[3] != 'F') {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Uploaded file is not a valid PDF");
+        }
+        // Must be a fillable AcroForm PDF, otherwise generation cannot fill it
+        List<String> fields = extractPdfFields(pdfBytes);
+        if (fields.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "No fillable AcroForm fields found in the PDF. Upload the official fillable USCIS form.");
+        }
+        // Reject duplicate active editions
+        boolean dup = versionRepo.findByFormTypeOrderByCreatedAtDesc(ft).stream()
+            .anyMatch(v -> edition.equals(v.getEditionDate())
+                && ("PENDING_REVIEW".equals(v.getStatus()) || "APPROVED".equals(v.getStatus())));
+        if (dup) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "A " + ft + " version for edition " + edition + " already exists (PENDING_REVIEW or APPROVED).");
+        }
+
+        String storageKey = storePdf(ft, edition, pdfBytes);
+        if (storageKey == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Could not store the uploaded PDF on disk");
+        }
+
+        FormVersion fv = new FormVersion();
+        fv.setFormType(ft);
+        fv.setEditionDate(edition);
+        fv.setDownloadedAt(LocalDateTime.now());
+        fv.setPdfStorageKey(storageKey);
+        fv.setStatus("PENDING_REVIEW");
+        fv.setFieldMappingVerified(false);
+        try {
+            fv.setPdfFieldNamesJson(objectMapper.writeValueAsString(fields));
+        } catch (Exception e) {
+            fv.setPdfFieldNamesJson("[]");
+        }
+        fv.setReleaseNotes("Manually uploaded by " + caller.getEmail()
+            + " (" + (pdf.getOriginalFilename() != null ? pdf.getOriginalFilename() : "upload.pdf") + ")");
+        fv = versionRepo.save(fv);
+
+        saveAudit(ft, edition, "MANUAL_UPLOAD", caller.getId(),
+            "Manual upload by " + caller.getEmail() + ": " + fields.size()
+            + " AcroForm fields; file=" + pdf.getOriginalFilename());
+        log.info("FormVersion manual upload formType={} edition={} fields={} by {}",
+            ft, edition, fields.size(), caller.getEmail());
+        return toDTO(fv, null);
+    }
+
     // ── Scheduler entry point ─────────────────────────────────────────────────
 
     public void checkForUpdates() {
