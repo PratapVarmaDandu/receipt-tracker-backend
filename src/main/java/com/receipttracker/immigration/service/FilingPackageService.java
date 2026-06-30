@@ -183,13 +183,14 @@ public class FilingPackageService {
 
     // ── List packages for a case ──────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
+    @Transactional   // writable: self-heals packages that completed before "Send Questionnaires"
     public List<FilingPackageDTO> listForCase(Long caseId) {
         User caller = currentUser();
         permissionService.requireAccess(caller, caseId, GrantScope.READ_CASE);
 
         return packageRepo.findByCaseIdOrderByCreatedAtDesc(caseId).stream()
                 .map(pkg -> {
+                    advanceIfAllSubmitted(pkg);
                     List<FilingPackageQuestionnaire> qs = questionnaireRepo.findByFilingPackageId(pkg.getId());
                     List<String> formTypes = parseFormTypes(pkg.getSelectedFormTypesJson());
                     List<CanonicalQuestion> questions = questionRegistry.getQuestionsForForms(formTypes);
@@ -202,7 +203,7 @@ public class FilingPackageService {
 
     // ── Get single package ────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
+    @Transactional   // writable: self-heals a package that completed before "Send Questionnaires"
     public FilingPackageDTO getPackage(Long caseId, Long packageId) {
         User caller = currentUser();
         permissionService.requireAccess(caller, caseId, GrantScope.READ_CASE);
@@ -210,6 +211,7 @@ public class FilingPackageService {
         FilingPackage pkg = packageRepo.findByIdAndCaseId(packageId, caseId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Package not found"));
 
+        advanceIfAllSubmitted(pkg);
         List<FilingPackageQuestionnaire> qs = questionnaireRepo.findByFilingPackageId(pkg.getId());
         List<String> formTypes = parseFormTypes(pkg.getSelectedFormTypesJson());
         List<CanonicalQuestion> questions = questionRegistry.getQuestionsForForms(formTypes);
@@ -268,6 +270,25 @@ public class FilingPackageService {
         if (c.getLawFirmImmOrgId() != null && orgIds.contains(c.getLawFirmImmOrgId())) return "ATTORNEY";
         if (c.getEmployerImmOrgId() != null && orgIds.contains(c.getEmployerImmOrgId())) return "EMPLOYER";
         return null;
+    }
+
+    /**
+     * Advances a package to ANSWERS_COLLECTED once every questionnaire is submitted.
+     * Fires from DRAFT or QUESTIONNAIRES_SENT, so a package whose parties complete their
+     * questionnaires before "Send Questionnaires" was clicked (via the create-time email /
+     * in-app surface) still advances. Idempotent; never moves a package backward or past
+     * ANSWERS_COLLECTED, and ignores packages with no questionnaires.
+     */
+    private boolean advanceIfAllSubmitted(FilingPackage pkg) {
+        String status = pkg.getStatus();
+        if (!"DRAFT".equals(status) && !"QUESTIONNAIRES_SENT".equals(status)) return false;
+        List<FilingPackageQuestionnaire> qs = questionnaireRepo.findByFilingPackageId(pkg.getId());
+        if (qs.isEmpty()) return false;
+        if (!qs.stream().allMatch(q -> "SUBMITTED".equals(q.getStatus()))) return false;
+        pkg.setStatus("ANSWERS_COLLECTED");
+        packageRepo.save(pkg);
+        log.info("Package {} auto-advanced to ANSWERS_COLLECTED (all questionnaires submitted)", pkg.getId());
+        return true;
     }
 
     // ── Send questionnaires ───────────────────────────────────────────────────
@@ -485,13 +506,8 @@ public class FilingPackageService {
                 "{\"packageId\":" + pkg.getId() + ",\"targetRelationship\":\"" + q.getTargetRelationship() + "\"}",
                 caller.getId());
 
-        // Auto-transition package to ANSWERS_COLLECTED if all questionnaires submitted
-        List<FilingPackageQuestionnaire> allQs = questionnaireRepo.findByFilingPackageId(pkg.getId());
-        boolean allSubmitted = allQs.stream().allMatch(qs -> "SUBMITTED".equals(qs.getStatus()));
-        if (allSubmitted && "QUESTIONNAIRES_SENT".equals(pkg.getStatus())) {
-            pkg.setStatus("ANSWERS_COLLECTED");
-            packageRepo.save(pkg);
-        }
+        // Advance to ANSWERS_COLLECTED once every questionnaire is in.
+        advanceIfAllSubmitted(pkg);
 
         // Notify assigned attorney
         if (immCase.getAssignedAttorneyMemberId() != null) {

@@ -11,9 +11,35 @@
          OFF   — silence all app logs -->
   <springProperty name="appLogLevel" source="logging.level.com.receipttracker" defaultValue="INFO"/>
 
-  <root level="INFO">
-    <appender-ref ref="CONSOLE"/>
-  </root>
+  <!-- Hourly rolling file logs (prod only). Path overridable via LOG_PATH env var;
+       in the Oracle compose, /opt/logs is bind-mounted from the host.
+       Each hour rolls to backend-YYYY-MM-DD-HH.log. No maxHistory: files are
+       purged manually. Uncomment <totalSizeCap> for a safety ceiling. -->
+  <springProfile name="prod">
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+      <file>${LOG_PATH:-/opt/logs}/backend.log</file>
+      <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <fileNamePattern>${LOG_PATH:-/opt/logs}/backend-%d{yyyy-MM-dd-HH}.log</fileNamePattern>
+        <!-- <maxHistory>168</maxHistory> -->
+        <!-- <totalSizeCap>2GB</totalSizeCap> -->
+      </rollingPolicy>
+      <encoder>
+        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+      <appender-ref ref="FILE"/>
+    </root>
+  </springProfile>
+
+  <!-- Non-prod (local / local-mysql / test): console only, no /opt/logs writes -->
+  <springProfile name="!prod">
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </springProfile>
 
   <!-- Suppress noisy PDFBox font-scanner warnings (known PDFBox 3.x issue) -->
   <logger name="org.apache.fontbox"            level="ERROR"/>
