@@ -39,6 +39,26 @@ public class FormVersionController {
         return ResponseEntity.ok(formVersionService.uploadMapping(id, file));
     }
 
+    @GetMapping("/api/immigration/form-versions/{id}/mapping-builder")
+    public ResponseEntity<?> mappingBuilder(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(formVersionService.getMappingBuilder(id));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Failed"));
+        }
+    }
+
+    @PostMapping("/api/immigration/form-versions/{id}/mapping")
+    public ResponseEntity<?> saveMapping(@PathVariable Long id, @RequestBody Map<String, String> pairs) {
+        try {
+            return ResponseEntity.ok(formVersionService.saveMapping(id, pairs));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Failed"));
+        }
+    }
+
     @PostMapping(value = "/api/immigration/form-versions",
                  consumes = "multipart/form-data")
     public ResponseEntity<?> createManual(

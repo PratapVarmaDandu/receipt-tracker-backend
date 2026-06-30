@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.receipttracker.config.StoragePathResolver;
 import com.receipttracker.immigration.dto.FormVersionAuditEventDTO;
 import com.receipttracker.immigration.dto.FormVersionDTO;
+import com.receipttracker.immigration.dto.MappingBuilderDTO;
 import com.receipttracker.immigration.model.*;
+import com.receipttracker.immigration.model.question.CanonicalQuestion;
 import com.receipttracker.immigration.model.question.FormFieldEntry;
 import com.receipttracker.immigration.model.question.FormFieldMapping;
 import com.receipttracker.immigration.model.question.FormSectionMapping;
@@ -284,6 +286,112 @@ public class FormVersionService {
         log.info("FormVersion manual upload formType={} edition={} fields={} by {}",
             ft, edition, fields.size(), caller.getEmail());
         return toDTO(fv, null);
+    }
+
+    // ── Mapping builder (point-and-click authoring) ───────────────────────────
+
+    /** Returns canonical questions + extracted PDF field names so the UI can pair them. */
+    @Transactional(readOnly = true)
+    public MappingBuilderDTO getMappingBuilder(Long id) {
+        requireAttorneyOrOwner(currentUser());
+        FormVersion fv = versionRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Form version not found"));
+
+        List<MappingBuilderDTO.Question> questions = questionRegistry
+            .getQuestionsForForms(List.of(fv.getFormType())).stream()
+            .map(q -> new MappingBuilderDTO.Question(
+                    q.getKey(), q.getLabel(), q.getOwner(),
+                    q.getFriendlySection(),
+                    CanonicalQuestionRegistry.sectionLabel(q.getFriendlySection())))
+            .toList();
+
+        return new MappingBuilderDTO(fv.getId(), fv.getFormType(),
+                parsePdfFieldNames(fv), questions, flattenMapping(fv));
+    }
+
+    /** Persists a questionKey → pdfFieldName mapping authored in the builder and verifies it. */
+    public FormVersionDTO saveMapping(Long id, Map<String, String> pairs) {
+        User caller = currentUser();
+        requireAttorneyOrOwner(caller);
+        FormVersion fv = versionRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Form version not found"));
+
+        Map<String, String> input = pairs != null ? pairs : Map.of();
+        List<CanonicalQuestion> questions = questionRegistry.getQuestionsForForms(List.of(fv.getFormType()));
+        Set<String> validKeys = questions.stream().map(CanonicalQuestion::getKey).collect(Collectors.toSet());
+        List<String> unknown = input.keySet().stream().filter(k -> !validKeys.contains(k)).toList();
+        if (!unknown.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Unknown canonical question keys: " + unknown);
+        }
+
+        // Build sections grouped by the question's friendly section; skip unmapped questions.
+        Map<String, FormSectionMapping> sections = new LinkedHashMap<>();
+        int mappedCount = 0;
+        for (CanonicalQuestion q : questions) {
+            String pdfField = input.get(q.getKey());
+            if (pdfField == null || pdfField.isBlank()) continue;
+            String sectionId = q.getFriendlySection() != null ? q.getFriendlySection() : "other";
+            FormSectionMapping sec = sections.computeIfAbsent(sectionId, k -> {
+                FormSectionMapping s = new FormSectionMapping();
+                s.setOwner(q.getOwner());
+                s.setFields(new ArrayList<>());
+                return s;
+            });
+            FormFieldEntry entry = new FormFieldEntry();
+            entry.setQuestionKey(q.getKey());
+            entry.setPdfFieldName(pdfField.trim());
+            sec.getFields().add(entry);
+            mappedCount++;
+        }
+
+        FormFieldMapping mapping = new FormFieldMapping();
+        mapping.setFormType(fv.getFormType());
+        mapping.setSections(sections);
+        try {
+            fv.setProposedMappingJson(objectMapper.writeValueAsString(mapping));
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not serialize mapping");
+        }
+        fv.setFieldMappingVerified(mappedCount > 0);
+        fv = versionRepo.save(fv);
+        saveAudit(fv.getFormType(), fv.getEditionDate(), "MAPPING_UPDATED", caller.getId(),
+            "Mapping saved via builder: " + mappedCount + " fields mapped");
+        return toDTO(fv, null);
+    }
+
+    private List<String> parsePdfFieldNames(FormVersion fv) {
+        try {
+            if (fv.getPdfFieldNamesJson() == null) return List.of();
+            return objectMapper.readValue(fv.getPdfFieldNamesJson(), new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** Flatten the effective mapping (proposed if present, else bundled) to questionKey → pdfFieldName. */
+    private Map<String, String> flattenMapping(FormVersion fv) {
+        FormFieldMapping m = null;
+        if (fv.getProposedMappingJson() != null && !fv.getProposedMappingJson().isBlank()) {
+            try {
+                m = objectMapper.readValue(fv.getProposedMappingJson(), FormFieldMapping.class);
+            } catch (Exception ignored) { /* fall through to bundled */ }
+        }
+        if (m == null) {
+            m = questionRegistry.getFormMapping(fv.getFormType()).orElse(null);
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        if (m != null && m.getSections() != null) {
+            for (FormSectionMapping s : m.getSections().values()) {
+                if (s.getFields() == null) continue;
+                for (FormFieldEntry e : s.getFields()) {
+                    if (e.getQuestionKey() != null && e.getPdfFieldName() != null) {
+                        out.put(e.getQuestionKey(), e.getPdfFieldName());
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     // ── Scheduler entry point ─────────────────────────────────────────────────

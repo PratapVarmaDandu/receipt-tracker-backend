@@ -341,12 +341,16 @@ public class ImmPdfGenerationService {
     private byte[] fillForm(String formType, FormVersion fv, byte[] pdfBytes,
                              Map<String, FilingPackageAnswer> answerMap,
                              List<Map<String, Object>> auditEntries) {
-        Optional<FormFieldMapping> mappingOpt = questionRegistry.getFormMapping(formType);
-        if (mappingOpt.isEmpty()) {
+        // Prefer the per-edition mapping authored on this FormVersion (data, no redeploy);
+        // fall back to the bundled classpath mapping only if none has been saved yet.
+        FormFieldMapping mapping = parseProposedMapping(fv);
+        if (mapping == null) {
+            mapping = questionRegistry.getFormMapping(formType).orElse(null);
+        }
+        if (mapping == null) {
             log.warn("No form field mapping for {} — returning unfilled PDF", formType);
             return pdfBytes;
         }
-        FormFieldMapping mapping = mappingOpt.get();
 
         try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
             // USCIS form PDFs carry an encryption dictionary (owner-permissions, no password —
@@ -547,6 +551,18 @@ public class ImmPdfGenerationService {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Parse the per-edition mapping saved on the FormVersion; null if none/invalid. */
+    private FormFieldMapping parseProposedMapping(FormVersion fv) {
+        String json = fv.getProposedMappingJson();
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, FormFieldMapping.class);
+        } catch (Exception e) {
+            log.warn("Could not parse proposedMappingJson for form version {}: {}", fv.getId(), e.getMessage());
+            return null;
+        }
+    }
 
     private List<String> parseList(String json) {
         try {
