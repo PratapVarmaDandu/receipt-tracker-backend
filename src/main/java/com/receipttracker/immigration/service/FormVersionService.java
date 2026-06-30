@@ -85,6 +85,7 @@ public class FormVersionService {
     @Autowired private EmailService emailService;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private StoragePathResolver storagePathResolver;
+    @Autowired private StaticFormTemplateService templateService;
 
     // ── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -287,6 +288,116 @@ public class FormVersionService {
         log.info("FormVersion manual upload formType={} edition={} fields={} by {}",
             ft, edition, fields.size(), caller.getEmail());
         return toDTO(fv, null);
+    }
+
+    /**
+     * Generate a static AcroForm "data sheet" for a form type and register it as a PENDING_REVIEW
+     * version with its mapping already authored + verified (field name == sanitized question key).
+     * This is the static-AcroForm-replica path: PDFBox fills it reliably and it renders everywhere,
+     * unlike the dynamic XFA PDFs USCIS publishes. Attorney just needs to Approve it.
+     */
+    public FormVersionDTO createTemplateVersion(String formType, String editionDate) {
+        User caller = currentUser();
+        requireAttorneyOrOwner(caller);
+
+        if (formType == null || formType.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "formType is required");
+        String ft = formType.trim();
+        try {
+            FormType.valueOf(ft);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown form type: '" + ft + "'");
+        }
+        if (editionDate == null || editionDate.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "editionDate is required");
+        String edition = editionDate.trim();
+
+        List<CanonicalQuestion> questions = questionRegistry.getQuestionsForForms(List.of(ft));
+        if (questions.isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "No canonical questions are associated with form " + ft);
+
+        boolean dup = versionRepo.findByFormTypeOrderByCreatedAtDesc(ft).stream()
+            .anyMatch(v -> edition.equals(v.getEditionDate())
+                && ("PENDING_REVIEW".equals(v.getStatus()) || "APPROVED".equals(v.getStatus())));
+        if (dup)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "A " + ft + " version for edition " + edition + " already exists (PENDING_REVIEW or APPROVED).");
+
+        // questionKey → sanitized AcroForm field name (dots are field-hierarchy separators)
+        Map<String, String> pairs = new LinkedHashMap<>();
+        Set<String> used = new HashSet<>();
+        for (CanonicalQuestion q : questions) {
+            String name = sanitizeFieldName(q.getKey());
+            while (!used.add(name)) name = name + "_";
+            pairs.put(q.getKey(), name);
+        }
+
+        byte[] pdf;
+        try {
+            pdf = templateService.build(ft, edition, questions, pairs);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Could not build template PDF: " + e.getMessage());
+        }
+
+        List<String> fields = extractPdfFields(pdf);
+        String storageKey = storePdf(ft, edition, pdf);
+        if (storageKey == null)
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not store the template PDF");
+
+        FormFieldMapping mapping = buildMapping(ft, questions, pairs);
+
+        FormVersion fv = new FormVersion();
+        fv.setFormType(ft);
+        fv.setEditionDate(edition);
+        fv.setDownloadedAt(LocalDateTime.now());
+        fv.setPdfStorageKey(storageKey);
+        fv.setStatus("PENDING_REVIEW");
+        try {
+            fv.setPdfFieldNamesJson(objectMapper.writeValueAsString(fields));
+            fv.setProposedMappingJson(objectMapper.writeValueAsString(mapping));
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not serialize template metadata");
+        }
+        fv.setFieldMappingVerified(true);
+        fv.setReleaseNotes("Auto-generated static AcroForm template by " + caller.getEmail()
+            + " (" + fields.size() + " fields)");
+        fv = versionRepo.save(fv);
+
+        saveAudit(ft, edition, "MANUAL_UPLOAD", caller.getId(),
+            "Generated static AcroForm template: " + fields.size() + " fields, mapping auto-verified");
+        log.info("FormVersion template generated formType={} edition={} fields={} by {}",
+            ft, edition, fields.size(), caller.getEmail());
+        return toDTO(fv, null);
+    }
+
+    private String sanitizeFieldName(String questionKey) {
+        return questionKey.replaceAll("[^A-Za-z0-9]", "_");
+    }
+
+    private FormFieldMapping buildMapping(String formType, List<CanonicalQuestion> questions,
+                                          Map<String, String> pairs) {
+        Map<String, FormSectionMapping> sections = new LinkedHashMap<>();
+        for (CanonicalQuestion q : questions) {
+            String pdfField = pairs.get(q.getKey());
+            if (pdfField == null) continue;
+            String sectionId = q.getFriendlySection() != null ? q.getFriendlySection() : "other";
+            FormSectionMapping sec = sections.computeIfAbsent(sectionId, k -> {
+                FormSectionMapping s = new FormSectionMapping();
+                s.setOwner(q.getOwner());
+                s.setFields(new ArrayList<>());
+                return s;
+            });
+            FormFieldEntry entry = new FormFieldEntry();
+            entry.setQuestionKey(q.getKey());
+            entry.setPdfFieldName(pdfField);
+            sec.getFields().add(entry);
+        }
+        FormFieldMapping mapping = new FormFieldMapping();
+        mapping.setFormType(formType);
+        mapping.setSections(sections);
+        return mapping;
     }
 
     // ── Mapping builder (point-and-click authoring) ───────────────────────────

@@ -39,6 +39,17 @@ public class FormVersionController {
         return ResponseEntity.ok(formVersionService.uploadMapping(id, file));
     }
 
+    @PostMapping("/api/immigration/form-versions/generate-template")
+    public ResponseEntity<?> generateTemplate(@RequestBody Map<String, String> body) {
+        try {
+            return ResponseEntity.ok(formVersionService.createTemplateVersion(
+                    body.get("formType"), body.get("editionDate")));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Failed"));
+        }
+    }
+
     @GetMapping("/api/immigration/form-versions/{id}/mapping-builder")
     public ResponseEntity<?> mappingBuilder(@PathVariable Long id) {
         try {
