@@ -85,6 +85,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/vehicles/access/join/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/org/join/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/immigration/cases/join/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/immigration/orgs/join/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/immigration/forms/shared/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/immigration/visa-bulletin/latest").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/immigration/partnerships/onboard/**").permitAll()

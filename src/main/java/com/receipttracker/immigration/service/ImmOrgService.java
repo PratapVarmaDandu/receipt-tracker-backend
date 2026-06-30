@@ -10,9 +10,11 @@ import com.receipttracker.immigration.repository.ImmOrgMemberRepository;
 import com.receipttracker.immigration.repository.ImmOrgRepository;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
+import com.receipttracker.service.EmailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -32,6 +34,10 @@ public class ImmOrgService {
     @Autowired private ImmOrgRepository immOrgRepo;
     @Autowired private ImmOrgMemberRepository immOrgMemberRepo;
     @Autowired private UserRepository userRepo;
+    @Autowired private EmailService emailService;
+
+    @Value("${app.frontend.url:http://localhost:4200}")
+    private String frontendUrl;
 
     private User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -142,6 +148,20 @@ public class ImmOrgService {
         ImmOrgMember saved = immOrgMemberRepo.save(member);
 
         log.warn("IMM_ORG_INVITE orgId={} email={} role={} token={}", orgId, req.email(), assignedRole, token);
+
+        // Send the invite email with the join link. Non-fatal: a delivery failure must not
+        // roll back the membership row, but we capture the full exception (stack trace) so a
+        // misconfigured SMTP / send failure is traceable in the backend logs.
+        String orgName = immOrgRepo.findById(orgId).map(ImmOrg::getName).orElse("the firm");
+        String inviteUrl = frontendUrl + "/immigration/orgs/join/" + token;
+        try {
+            emailService.sendOrgInvite(req.email(), caller.getName(), orgName, assignedRole.name(), inviteUrl);
+            log.info("IMM_ORG_INVITE email sent orgId={} email={} role={}", orgId, req.email(), assignedRole);
+        } catch (Exception e) {
+            log.error("IMM_ORG_INVITE email failed (non-fatal) orgId={} email={} role={}",
+                    orgId, req.email(), assignedRole, e);
+        }
+
         return toMemberDTO(saved);
     }
 
@@ -167,9 +187,11 @@ public class ImmOrgService {
 
     @Transactional(readOnly = true)
     public ImmOrgMemberDTO getJoinInfo(String token) {
-        return immOrgMemberRepo.findByInviteToken(token)
-                .map(this::toMemberDTO)
+        ImmOrgMember m = immOrgMemberRepo.findByInviteToken(token)
                 .orElseThrow(() -> new RuntimeException("Invalid or expired invite token"));
+        String orgName = immOrgRepo.findById(m.getImmOrgId()).map(ImmOrg::getName).orElse("the firm");
+        return new ImmOrgMemberDTO(m.getId(), m.getImmOrgId(), m.getUserId(),
+                m.getEmail(), m.getRole().name(), m.getStatus().name(), null, orgName);
     }
 
     @Transactional
@@ -245,7 +267,7 @@ public class ImmOrgService {
 
     private ImmOrgMemberDTO toMemberDTO(ImmOrgMember m) {
         return new ImmOrgMemberDTO(m.getId(), m.getImmOrgId(), m.getUserId(),
-                m.getEmail(), m.getRole().name(), m.getStatus().name(), null);
+                m.getEmail(), m.getRole().name(), m.getStatus().name(), null, null);
     }
 
     private static void rejectHtml(String fieldName, String value) {
