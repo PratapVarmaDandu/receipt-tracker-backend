@@ -102,6 +102,26 @@ public class ImmOrgController {
         }
     }
 
+    @PostMapping("/{id}/members/{mid}/resend")
+    public ResponseEntity<?> resendInvite(@PathVariable Long id, @PathVariable Long mid) {
+        log.info("POST /api/immigration/orgs/{}/members/{}/resend", id, mid);
+        try {
+            return ResponseEntity.ok(immOrgService.resendInvite(id, mid));
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
+    @PutMapping("/{id}/members/{mid}/reactivate")
+    public ResponseEntity<?> reactivateMember(@PathVariable Long id, @PathVariable Long mid) {
+        log.info("PUT /api/immigration/orgs/{}/members/{}/reactivate", id, mid);
+        try {
+            return ResponseEntity.ok(immOrgService.reactivateMember(id, mid));
+        } catch (RuntimeException e) {
+            return denied(e);
+        }
+    }
+
     // public — no auth enforced in controller; service returns public info only
     @GetMapping("/join/{token}")
     public ResponseEntity<?> getJoinInfo(@PathVariable String token) {

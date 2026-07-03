@@ -138,29 +138,21 @@ public class ImmOrgService {
             return toMemberDTO(existing.get());
         }
 
+        // Reuse a previously-revoked row instead of inserting a new one, so the member's id
+        // (and any case referencing it via assignedAttorneyMemberId/assignedParalegalMemberId)
+        // stays stable across revoke/re-invite cycles.
         String token = UUID.randomUUID().toString();
-        ImmOrgMember member = new ImmOrgMember();
+        ImmOrgMember member = existing.orElseGet(ImmOrgMember::new);
         member.setImmOrgId(orgId);
         member.setEmail(req.email());
         member.setRole(assignedRole);
         member.setStatus(ImmOrgMemberStatus.PENDING);
         member.setInviteToken(token);
+        member.setUserId(null);
         ImmOrgMember saved = immOrgMemberRepo.save(member);
 
         log.warn("IMM_ORG_INVITE orgId={} email={} role={} token={}", orgId, req.email(), assignedRole, token);
-
-        // Send the invite email with the join link. Non-fatal: a delivery failure must not
-        // roll back the membership row, but we capture the full exception (stack trace) so a
-        // misconfigured SMTP / send failure is traceable in the backend logs.
-        String orgName = immOrgRepo.findById(orgId).map(ImmOrg::getName).orElse("the firm");
-        String inviteUrl = frontendUrl + "/immigration/orgs/join/" + token;
-        try {
-            emailService.sendOrgInvite(req.email(), caller.getName(), orgName, assignedRole.name(), inviteUrl);
-            log.info("IMM_ORG_INVITE email sent orgId={} email={} role={}", orgId, req.email(), assignedRole);
-        } catch (Exception e) {
-            log.error("IMM_ORG_INVITE email failed (non-fatal) orgId={} email={} role={}",
-                    orgId, req.email(), assignedRole, e);
-        }
+        sendInviteEmail(orgId, caller, req.email(), assignedRole, token, "IMM_ORG_INVITE");
 
         return toMemberDTO(saved);
     }
@@ -181,8 +173,89 @@ public class ImmOrgService {
         if (!member.getImmOrgId().equals(orgId)) {
             throw new RuntimeException("Member does not belong to org " + orgId);
         }
+        if (member.getRole() == ImmOrgMemberRole.OWNER) {
+            long activeOwners = immOrgMemberRepo.findByImmOrgId(orgId).stream()
+                    .filter(m -> m.getRole() == ImmOrgMemberRole.OWNER && m.getStatus() == ImmOrgMemberStatus.ACTIVE)
+                    .count();
+            if (activeOwners <= 1) {
+                throw new RuntimeException("Cannot revoke the last owner of an organization");
+            }
+        }
         member.setStatus(ImmOrgMemberStatus.REMOVED);
         immOrgMemberRepo.save(member);
+    }
+
+    /** Re-sends the invite email for a still-PENDING member with a freshly generated token
+     *  (invalidating the previous link). */
+    @Transactional
+    public ImmOrgMemberDTO resendInvite(Long orgId, Long memberId) {
+        User caller = currentUser();
+        requireOwner(caller, orgId);
+        ImmOrgMember member = requireMemberOfOrg(orgId, memberId);
+        if (member.getStatus() != ImmOrgMemberStatus.PENDING) {
+            throw new RuntimeException("Can only resend invites for pending members");
+        }
+
+        String token = UUID.randomUUID().toString();
+        member.setInviteToken(token);
+        ImmOrgMember saved = immOrgMemberRepo.save(member);
+
+        sendInviteEmail(orgId, caller, member.getEmail(), member.getRole(), token, "IMM_ORG_INVITE_RESEND");
+        return toMemberDTO(saved);
+    }
+
+    /** Restores a revoked member's access. If they had already accepted their invite before being
+     *  revoked, access is restored immediately (no email). Otherwise the invite cycle is restarted
+     *  with a fresh link. Reuses the same row/id so historical case assignments stay intact. */
+    @Transactional
+    public ImmOrgMemberDTO reactivateMember(Long orgId, Long memberId) {
+        User caller = currentUser();
+        requireOwner(caller, orgId);
+        ImmOrgMember member = requireMemberOfOrg(orgId, memberId);
+        if (member.getStatus() != ImmOrgMemberStatus.REMOVED) {
+            throw new RuntimeException("Only revoked members can be reactivated");
+        }
+
+        if (member.getUserId() != null) {
+            member.setStatus(ImmOrgMemberStatus.ACTIVE);
+            ImmOrgMember saved = immOrgMemberRepo.save(member);
+            log.warn("IMM_ORG_MEMBER_REACTIVATED orgId={} memberId={} email={} -> ACTIVE (direct restore)",
+                    orgId, memberId, member.getEmail());
+            return toMemberDTO(saved);
+        }
+
+        String token = UUID.randomUUID().toString();
+        member.setStatus(ImmOrgMemberStatus.PENDING);
+        member.setInviteToken(token);
+        ImmOrgMember saved = immOrgMemberRepo.save(member);
+
+        log.warn("IMM_ORG_MEMBER_REACTIVATED orgId={} memberId={} email={} -> PENDING (re-inviting)",
+                orgId, memberId, member.getEmail());
+        sendInviteEmail(orgId, caller, member.getEmail(), member.getRole(), token, "IMM_ORG_INVITE_RESEND");
+        return toMemberDTO(saved);
+    }
+
+    private ImmOrgMember requireMemberOfOrg(Long orgId, Long memberId) {
+        ImmOrgMember member = immOrgMemberRepo.findById(memberId)
+                .orElseThrow(() -> new RuntimeException("Member not found: " + memberId));
+        if (!member.getImmOrgId().equals(orgId)) {
+            throw new RuntimeException("Member does not belong to org " + orgId);
+        }
+        return member;
+    }
+
+    // Non-fatal: a delivery failure must not roll back the membership row, but the full
+    // exception (stack trace) is captured so a misconfigured SMTP / send failure is traceable.
+    private void sendInviteEmail(Long orgId, User caller, String email, ImmOrgMemberRole role,
+                                  String token, String logTag) {
+        String orgName = immOrgRepo.findById(orgId).map(ImmOrg::getName).orElse("the firm");
+        String inviteUrl = frontendUrl + "/immigration/orgs/join/" + token;
+        try {
+            emailService.sendOrgInvite(email, caller.getName(), orgName, role.name(), inviteUrl);
+            log.info("{} email sent orgId={} email={} role={}", logTag, orgId, email, role);
+        } catch (Exception e) {
+            log.error("{} email failed (non-fatal) orgId={} email={} role={}", logTag, orgId, email, role, e);
+        }
     }
 
     @Transactional(readOnly = true)
