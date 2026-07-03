@@ -1,0 +1,177 @@
+{
+  "formType": "I290B",
+  "sections": {
+    "attorney_rep_block": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.g28Attached",
+          "pdfFieldName": "form1[0].#subform[0].G28-CheckBox1[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "attorney.barNumber",
+          "pdfFieldName": "form1[0].#subform[0].AttorneyStateBarNumber[0]"
+        },
+        {
+          "questionKey": "petition.attorneyUscisOnlineAccountNumber",
+          "pdfFieldName": "form1[0].#subform[0].USCISELISAcctNumber[0]"
+        }
+      ]
+    },
+    "part1_applicant": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.lastName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1_Line1a_FamilyName[0]"
+        },
+        {
+          "questionKey": "beneficiary.firstName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1_Line1b_GivenName[0]"
+        },
+        {
+          "questionKey": "beneficiary.middleName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1_Line1c_MiddleName[0]"
+        },
+        {
+          "questionKey": "beneficiary.dateOfBirth",
+          "pdfFieldName": "form1[0].#subform[0].P1_Line2_DateofBirth[0]"
+        },
+        {
+          "questionKey": "employer.legalName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1_Line3a_InCareOfName[0]"
+        },
+        {
+          "questionKey": "beneficiary.alienNumber",
+          "pdfFieldName": "form1[0].#subform[0].#area[0].Pt1_Line6_AlienNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.uscisAccountNumber",
+          "pdfFieldName": "form1[0].#subform[0].Pt1_Line7_USCISELISAcctNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingInCareOfName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line6_InCareOfName[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressLine1",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line6_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressCity",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line6_CityOrTown[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressState",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line6_State[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressZip",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line6_ZipCode[0]"
+        }
+      ]
+    },
+    "part2_appeal_or_motion": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.appealBriefStatus",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line1_checkbox[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "AttachedNow"
+        },
+        {
+          "questionKey": "petition.appealBriefStatus",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line1_checkbox[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "WillSubmitWithin30Days"
+        },
+        {
+          "questionKey": "petition.appealBriefStatus",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line1_checkbox[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "NoBrief"
+        },
+        {
+          "questionKey": "petition.motionType",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line2_checkbox[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Reopen"
+        },
+        {
+          "questionKey": "petition.motionType",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line2_checkbox[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Reconsider"
+        },
+        {
+          "questionKey": "petition.motionType",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line2_checkbox[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "ReopenAndReconsider"
+        },
+        {
+          "questionKey": "petition.relatedFormType",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line2_Formnumberappeal[0]"
+        },
+        {
+          "questionKey": "petition.mostRecentReceiptNumber",
+          "pdfFieldName": "form1[0].#subform[1].Pt2_Line3_ReceiptNumber[0]"
+        },
+        {
+          "questionKey": "petition.appealRequestedClassification",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line4_ImmigrantClassification[0]"
+        },
+        {
+          "questionKey": "petition.appealDecisionDate",
+          "pdfFieldName": "form1[0].#subform[1].P2_Line5_DateAdverseDecision[0]"
+        },
+        {
+          "questionKey": "petition.appealIssuingOffice",
+          "pdfFieldName": "form1[0].#subform[1].P3_Line6_USCISOffice[0]"
+        }
+      ]
+    },
+    "part3_basis": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.appealBasisStatement",
+          "pdfFieldName": "form1[0].#subform[1].Pt3_FillableField[0]"
+        }
+      ]
+    },
+    "part4_contact_signature": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.phone",
+          "pdfFieldName": "form1[0].#subform[2].P4_Line3_TelephoneNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.email",
+          "pdfFieldName": "form1[0].#subform[2].P4_Line5_Email[0]"
+        },
+        {
+          "questionKey": "beneficiary.applicationSignatureDate",
+          "pdfFieldName": "form1[0].#subform[2].P4_Line6b_DateofSignature[0]"
+        }
+      ]
+    },
+    "part6_preparer": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "attorney.firmName",
+          "pdfFieldName": "form1[0].#subform[2].P6_Line2_BusinessName[0]"
+        },
+        {
+          "questionKey": "attorney.email",
+          "pdfFieldName": "form1[0].#subform[2].Pt6_Line6_PrepEmailAddress[0]"
+        }
+      ]
+    }
+  }
+}

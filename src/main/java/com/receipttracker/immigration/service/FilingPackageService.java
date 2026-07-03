@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.receipttracker.immigration.dto.*;
 import com.receipttracker.immigration.model.*;
 import com.receipttracker.immigration.model.question.CanonicalQuestion;
+import com.receipttracker.immigration.model.question.RepeatGroupSpec;
+import com.receipttracker.immigration.model.question.RepeatItemField;
 import com.receipttracker.immigration.model.question.ResolvedValue;
 import com.receipttracker.immigration.repository.*;
 import com.receipttracker.model.User;
@@ -49,6 +51,7 @@ public class FilingPackageService {
     @Autowired private PermissionService permissionService;
     @Autowired private CanonicalQuestionRegistry questionRegistry;
     @Autowired private DataResolver dataResolver;
+    @Autowired private CanonicalAnswerService canonicalAnswerService;
     @Autowired private EncryptionService encryptionService;
     @Autowired private EmailService emailService;
     @Autowired private ObjectMapper objectMapper;
@@ -103,7 +106,7 @@ public class FilingPackageService {
         List<CanonicalQuestion> questions = questionRegistry.getQuestionsForForms(req.selectedFormTypes());
 
         // Build resolution context
-        DataResolver.ResolutionContext ctx = buildContext(immCase);
+        DataResolver.ResolutionContext ctx = buildContext(immCase, questions);
 
         // Prefill answers from profile/org
         Map<String, ResolvedValue> resolved = dataResolver.resolveAll(questions, ctx);
@@ -128,12 +131,14 @@ public class FilingPackageService {
             }
         }
 
-        // Create one questionnaire per owner that has questions
-        Map<String, List<CanonicalQuestion>> byOwner = questionRegistry.getQuestionsByOwner(questions);
+        // Create one questionnaire per owner that has questions.
+        // Derived questions are computed, never asked; review-only questions are
+        // attorney attestations set via override — exclude both from the spec.
+        Map<String, List<String>> specByOwner = questionRegistry.getQuestionnaireSpecByOwner(questions);
         List<FilingPackageQuestionnaire> questionnaires = new ArrayList<>();
-        for (Map.Entry<String, List<CanonicalQuestion>> entry : byOwner.entrySet()) {
+        for (Map.Entry<String, List<String>> entry : specByOwner.entrySet()) {
             String owner = entry.getKey();
-            List<String> keys = entry.getValue().stream().map(CanonicalQuestion::getKey).toList();
+            List<String> keys = entry.getValue();
 
             FilingPackageQuestionnaire q = new FilingPackageQuestionnaire();
             q.setFilingPackage(pkg);
@@ -408,12 +413,26 @@ public class FilingPackageService {
                 }
             }
 
+            // LIST questions carry their row-editor spec so the frontend can
+            // render add/remove rows
+            Integer maxRows = null;
+            List<QuestionnairePublicDTO.ItemFieldDTO> itemFields = null;
+            RepeatGroupSpec rg = cq.getRepeatGroup();
+            if (cq.isList() && rg != null && rg.getItemFields() != null) {
+                maxRows = rg.effectiveMaxRows();
+                itemFields = rg.getItemFields().stream()
+                        .map(f -> new QuestionnairePublicDTO.ItemFieldDTO(
+                                f.getKey(), f.getLabel(), f.getType(), f.isRequired(), f.getOptions()))
+                        .toList();
+            }
+
             QuestionnairePublicDTO.QuestionnaireQuestion qqDTO =
                     new QuestionnairePublicDTO.QuestionnaireQuestion(
                             cq.getKey(), cq.getLabel(), cq.getSublabel(),
                             cq.getType(), cq.isRequired(),
                             cq.getValidation(), options,
-                            prefillValue, prefillSource
+                            prefillValue, prefillSource,
+                            maxRows, itemFields
                     );
 
             String section = cq.getFriendlySection() != null ? cq.getFriendlySection() : "other";
@@ -460,11 +479,23 @@ public class FilingPackageService {
         Map<String, String> answers = req.answers() != null ? req.answers() : Collections.emptyMap();
         List<String> questionKeys = parseStringList(q.getQuestionnaireSpecJson());
 
+        // Only keys in the questionnaire spec are accepted — for both the package
+        // answers below and the canonical write-back afterwards.
+        Map<String, String> accepted = new LinkedHashMap<>();
+
         for (String key : questionKeys) {
             String value = answers.get(key);
             if (value == null || value.isBlank()) continue;
 
             Optional<CanonicalQuestion> cqOpt = questionRegistry.findByKey(key);
+
+            // LIST answers arrive as JSON arrays — validate/normalize before storing
+            if (cqOpt.map(CanonicalQuestion::isList).orElse(false)) {
+                value = sanitizeListAnswer(cqOpt.get(), value);
+                if (value == null) continue;
+            }
+            accepted.put(key, value);
+
             boolean sensitive = cqOpt.map(cq -> cq.isEncrypt()).orElse(false);
             String owner = cqOpt.map(CanonicalQuestion::getOwner).orElse(q.getTargetRelationship());
 
@@ -491,7 +522,7 @@ public class FilingPackageService {
         }
 
         // Write back to canonical data sources
-        writeBackAnswers(q.getTargetRelationship(), immCase, answers);
+        writeBackAnswers(q.getTargetRelationship(), immCase, accepted, caller.getId());
 
         // Mark questionnaire submitted
         q.setStatus("SUBMITTED");
@@ -534,6 +565,15 @@ public class FilingPackageService {
         if (req.value() == null || req.value().isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Value is required for override");
 
+        String value = req.value();
+        Optional<CanonicalQuestion> cqReg = questionRegistry.findByKey(answerKey);
+        if (cqReg.map(CanonicalQuestion::isList).orElse(false)) {
+            value = sanitizeListAnswer(cqReg.get(), value);
+            if (value == null)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "List answer for '" + answerKey + "' contains no valid rows");
+        }
+
         FilingPackageAnswer ans = answerRepo
                 .findByFilingPackageIdAndQuestionKey(pkg.getId(), answerKey)
                 .orElseGet(() -> {
@@ -546,17 +586,16 @@ public class FilingPackageService {
                     return a;
                 });
 
-        boolean sensitive = questionRegistry.findByKey(answerKey)
-                .map(cq -> cq.isEncrypt()).orElse(false);
+        boolean sensitive = cqReg.map(cq -> cq.isEncrypt()).orElse(false);
 
         ans.setSource("attorney_override");
         ans.setAnsweredByUserId(caller.getId());
         ans.setAttorneyOverrideReason(req.overrideReason());
         if (sensitive) {
-            ans.setValueJson(encryptionService.encrypt(req.value()));
-            ans.setValueHash(sha256(req.value()));
+            ans.setValueJson(encryptionService.encrypt(value));
+            ans.setValueHash(sha256(value));
         } else {
-            ans.setValueJson(req.value());
+            ans.setValueJson(value);
             ans.setValueHash(null);
         }
         ans = answerRepo.save(ans);
@@ -587,7 +626,13 @@ public class FilingPackageService {
         int totalRequired = 0, totalAnswered = 0;
 
         for (CanonicalQuestion cq : questions) {
-            String owner = cq.getOwner() != null ? cq.getOwner() : "UNKNOWN";
+            // Review-only attestations get their own group and stay out of the
+            // overall completeness — they're answered at attorney review time,
+            // not through questionnaires. Pre-generation check 4 still blocks
+            // on required ones.
+            boolean reviewOnly = cq.isReviewOnly();
+            String owner = reviewOnly ? "ATTORNEY_REVIEW"
+                    : (cq.getOwner() != null ? cq.getOwner() : "UNKNOWN");
             boolean required = cq.isRequired();
             boolean sensitive = cq.isEncrypt();
             FilingPackageAnswer ans = answerByKey.get(cq.getKey());
@@ -599,7 +644,7 @@ public class FilingPackageService {
                     && ("profile".equals(source) || "org".equals(source))
                     && (ans.getVerifiedAt() == null || ans.getVerifiedAt().isBefore(staleThreshold));
 
-            if (required) {
+            if (required && !reviewOnly) {
                 totalRequired++;
                 if (hasValue) totalAnswered++;
                 else missingRequired.add(cq.getKey());
@@ -660,7 +705,16 @@ public class FilingPackageService {
     // ── Write-back helpers ────────────────────────────────────────────────────
 
     private void writeBackAnswers(String targetRelationship, ImmigrationCase immCase,
-                                  Map<String, String> answers) {
+                                  Map<String, String> rawAnswers, Long updatedByUserId) {
+        // Derived and review-only questions are never collected, so they must never
+        // write back. Questionnaire specs already exclude them; this guards direct
+        // callers too.
+        Map<String, String> answers = rawAnswers.entrySet().stream()
+                .filter(e -> questionRegistry.findByKey(e.getKey())
+                        .map(cq -> !cq.isDerived() && !cq.isReviewOnly()).orElse(true))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (a, b) -> a, LinkedHashMap::new));
+
         switch (targetRelationship) {
             case "BENEFICIARY" -> {
                 canonicalProfileRepo.findByBeneficiary(immCase.getBeneficiary()).ifPresent(profile -> {
@@ -676,7 +730,17 @@ public class FilingPackageService {
                     });
                 }
             }
-            // ATTORNEY answers don't write back to a shared entity
+            // ATTORNEY answers have no typed write-back target; generic-storage
+            // answers below still persist for them.
+        }
+
+        // Generic-storage questions persist to imm_canonical_answers so the value
+        // prefills the next package (any owner, including ATTORNEY).
+        for (Map.Entry<String, String> e : answers.entrySet()) {
+            questionRegistry.findByKey(e.getKey())
+                    .filter(CanonicalQuestion::isGenericStorage)
+                    .ifPresent(cq -> canonicalAnswerService.subjectFor(cq, immCase)
+                            .ifPresent(ref -> canonicalAnswerService.save(ref, cq, e.getValue(), updatedByUserId)));
         }
     }
 
@@ -727,6 +791,54 @@ public class FilingPackageService {
         if (v != null && !v.isBlank()) setter.set(encryptionService.encrypt(v));
     }
 
+    // ── Repeat groups (LIST answers) ──────────────────────────────────────────
+
+    /**
+     * Validates and normalizes a LIST answer: must parse as a JSON array of
+     * row objects (400 otherwise); only declared itemFields survive; blank
+     * rows are dropped; rows beyond maxRows are ignored with a WARN (USCIS
+     * overflow sheets are out of scope). Returns the canonical JSON array
+     * string, or null when no rows survive.
+     */
+    String sanitizeListAnswer(CanonicalQuestion cq, String raw) {
+        RepeatGroupSpec spec = cq.getRepeatGroup();
+        List<Map<String, Object>> rows;
+        try {
+            rows = objectMapper.readValue(raw, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Answer for '" + cq.getKey() + "' must be a JSON array of row objects");
+        }
+
+        List<RepeatItemField> fields = spec != null && spec.getItemFields() != null
+                ? spec.getItemFields() : List.of();
+        List<Map<String, String>> clean = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (row == null) continue;
+            Map<String, String> out = new LinkedHashMap<>();
+            for (RepeatItemField f : fields) {
+                Object val = row.get(f.getKey());
+                if (val instanceof String s && !s.isBlank()) out.put(f.getKey(), s.trim());
+                else if (val instanceof Number || val instanceof Boolean) out.put(f.getKey(), String.valueOf(val));
+            }
+            if (!out.isEmpty()) clean.add(out);
+        }
+
+        int maxRows = spec != null ? spec.effectiveMaxRows() : RepeatGroupSpec.DEFAULT_MAX_ROWS;
+        if (clean.size() > maxRows) {
+            log.warn("LIST answer '{}' has {} rows — keeping the first {}, rest ignored",
+                     cq.getKey(), clean.size(), maxRows);
+            clean = clean.subList(0, maxRows);
+        }
+        if (clean.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(clean);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not serialize list answer for '" + cq.getKey() + "'");
+        }
+    }
+
     // ── Validation ────────────────────────────────────────────────────────────
 
     private void validateSubmitter(String targetRelationship, ImmigrationCase immCase, User caller) {
@@ -772,7 +884,8 @@ public class FilingPackageService {
 
     // ── Resolution context ────────────────────────────────────────────────────
 
-    private DataResolver.ResolutionContext buildContext(ImmigrationCase immCase) {
+    private DataResolver.ResolutionContext buildContext(ImmigrationCase immCase,
+                                                        List<CanonicalQuestion> questions) {
         CanonicalProfile profile = canonicalProfileRepo
                 .findByBeneficiary(immCase.getBeneficiary()).orElse(null);
 
@@ -788,7 +901,11 @@ public class FilingPackageService {
                     .findByImmOrgMemberId(immCase.getAssignedAttorneyMemberId()).orElse(null);
         }
 
-        return DataResolver.ResolutionContext.of(profile, employerOrg, lawFirmOrg, immCase, attorneyProfile);
+        // Plaintext values for generic-storage questions (imm_canonical_answers)
+        Map<String, String> genericAnswers = canonicalAnswerService.loadForCase(immCase, questions);
+
+        return DataResolver.ResolutionContext.of(profile, employerOrg, lawFirmOrg, immCase,
+                attorneyProfile, genericAnswers);
     }
 
     // ── DTO builders ──────────────────────────────────────────────────────────
@@ -799,13 +916,15 @@ public class FilingPackageService {
                                    Map<String, ResolvedValue> resolved) {
         List<String> formTypes = parseFormTypes(pkg.getSelectedFormTypesJson());
 
-        // Completeness per owner
+        // Completeness per owner — review-only attestations are excluded: they're
+        // never part of an owner's questionnaire, so they'd only distort progress
         Map<String, List<CanonicalQuestion>> byOwner = questionRegistry.getQuestionsByOwner(questions);
         Map<String, Integer> completeness = new LinkedHashMap<>();
         for (Map.Entry<String, List<CanonicalQuestion>> e : byOwner.entrySet()) {
-            long req = e.getValue().stream().filter(q -> q.isRequired()).count();
+            long req = e.getValue().stream()
+                    .filter(q -> q.isRequired() && !q.isReviewOnly()).count();
             long ans = e.getValue().stream()
-                    .filter(q -> q.isRequired())
+                    .filter(q -> q.isRequired() && !q.isReviewOnly())
                     .filter(q -> resolved.getOrDefault(q.getKey(), ResolvedValue.none()).hasValue())
                     .count();
             completeness.put(e.getKey(), req == 0 ? 100 : (int) Math.round(100.0 * ans / req));

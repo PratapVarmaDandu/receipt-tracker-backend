@@ -180,8 +180,10 @@ public class FormVersionService {
             if (mapping.getSections() == null || mapping.getSections().isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mapping JSON has no sections");
             }
-            // Validate all questionKeys exist in canonical registry
+            // Validate all questionKeys exist in canonical registry + field-type metadata
             List<String> unknownKeys = new ArrayList<>();
+            List<String> badFieldTypes = new ArrayList<>();
+            List<String> badRepeatEntries = new ArrayList<>();
             for (FormSectionMapping section : mapping.getSections().values()) {
                 if (section.getFields() != null) {
                     for (FormFieldEntry entry : section.getFields()) {
@@ -189,12 +191,29 @@ public class FormVersionService {
                                 && questionRegistry.findByKey(entry.getQuestionKey()).isEmpty()) {
                             unknownKeys.add(entry.getQuestionKey());
                         }
+                        if (entry.getPdfFieldType() != null
+                                && !PdfFieldApplier.VALID_FIELD_TYPES.contains(entry.getPdfFieldType())) {
+                            badFieldTypes.add(entry.getPdfFieldName() + " → '" + entry.getPdfFieldType() + "'");
+                        }
+                        String repeatProblem = questionRegistry.repeatEntryProblem(entry);
+                        if (repeatProblem != null) {
+                            badRepeatEntries.add(entry.getPdfFieldName() + ": " + repeatProblem);
+                        }
                     }
                 }
             }
             if (!unknownKeys.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Unknown canonical question keys: " + unknownKeys);
+            }
+            if (!badFieldTypes.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid pdfFieldType (must be one of " + PdfFieldApplier.VALID_FIELD_TYPES + "): "
+                    + badFieldTypes);
+            }
+            if (!badRepeatEntries.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid repeat-group entries: " + badRepeatEntries);
             }
             fv.setProposedMappingJson(json);
             fv.setFieldMappingVerified(true);
@@ -485,6 +504,16 @@ public class FormVersionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Unknown canonical question keys: " + unknown);
         }
+        // The builder authors scalar 1:1 pairs only — LIST questions need
+        // repeatIndex/itemField entries, authored via mapping JSON upload
+        List<String> listKeys = input.keySet().stream()
+                .filter(k -> questionRegistry.findByKey(k).map(CanonicalQuestion::isList).orElse(false))
+                .toList();
+        if (!listKeys.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "LIST questions cannot be mapped in the builder (use mapping JSON upload with repeatIndex/itemField): "
+                + listKeys);
+        }
 
         // Build sections grouped by the question's friendly section; skip unmapped questions.
         Map<String, FormSectionMapping> sections = new LinkedHashMap<>();
@@ -546,6 +575,9 @@ public class FormVersionService {
             for (FormSectionMapping s : m.getSections().values()) {
                 if (s.getFields() == null) continue;
                 for (FormFieldEntry e : s.getFields()) {
+                    // Repeat entries (N per questionKey) don't fit the builder's
+                    // 1:1 map — they are authored via JSON upload only
+                    if (e.isRepeatEntry()) continue;
                     if (e.getQuestionKey() != null && e.getPdfFieldName() != null) {
                         out.put(e.getQuestionKey(), e.getPdfFieldName());
                     }

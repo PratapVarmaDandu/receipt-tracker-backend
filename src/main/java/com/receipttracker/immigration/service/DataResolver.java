@@ -1,8 +1,11 @@
 package com.receipttracker.immigration.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.receipttracker.immigration.model.*;
 import com.receipttracker.immigration.model.question.CanonicalQuestion;
+import com.receipttracker.immigration.model.question.RepeatGroupSpec;
+import com.receipttracker.immigration.model.question.RepeatItemField;
 import com.receipttracker.immigration.model.question.ResolvedValue;
 import com.receipttracker.service.EncryptionService;
 import org.slf4j.Logger;
@@ -30,24 +33,39 @@ public class DataResolver {
 
     @Autowired private EncryptionService encryptionService;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private DerivationRegistry derivationRegistry;
 
     // ── Context container ─────────────────────────────────────────────────────
 
     /**
      * All canonical data objects needed for resolution.
      * Null fields are fine — DataResolver returns ResolvedValue.none() gracefully.
+     *
+     * @param genericAnswers plaintext values from the imm_canonical_answers store,
+     *                       keyed by questionKey — pre-loaded by the caller via
+     *                       CanonicalAnswerService.loadForCase() (this class makes
+     *                       no DB calls). Null is treated as empty.
      */
     public record ResolutionContext(
             CanonicalProfile profile,
             ImmOrg employerOrg,
             ImmOrg lawFirmOrg,
             ImmigrationCase immigrationCase,
-            AttorneyProfile attorneyProfile
+            AttorneyProfile attorneyProfile,
+            Map<String, String> genericAnswers
     ) {
         public static ResolutionContext of(CanonicalProfile profile, ImmOrg employerOrg,
                                            ImmOrg lawFirmOrg, ImmigrationCase c,
                                            AttorneyProfile attorneyProfile) {
-            return new ResolutionContext(profile, employerOrg, lawFirmOrg, c, attorneyProfile);
+            return new ResolutionContext(profile, employerOrg, lawFirmOrg, c, attorneyProfile, Map.of());
+        }
+
+        public static ResolutionContext of(CanonicalProfile profile, ImmOrg employerOrg,
+                                           ImmOrg lawFirmOrg, ImmigrationCase c,
+                                           AttorneyProfile attorneyProfile,
+                                           Map<String, String> genericAnswers) {
+            return new ResolutionContext(profile, employerOrg, lawFirmOrg, c, attorneyProfile,
+                    genericAnswers != null ? genericAnswers : Map.of());
         }
     }
 
@@ -59,6 +77,19 @@ public class DataResolver {
     public ResolvedValue resolve(CanonicalQuestion question, ResolutionContext ctx) {
         if (question == null || question.getKey() == null) return ResolvedValue.none();
         try {
+            // Review-only questions are per-package attorney attestations — never
+            // prefilled from profile/org/store; the attorney sets them via override
+            if (question.isReviewOnly()) return ResolvedValue.none();
+            // Derived questions are computed from case data — never stored, never collected
+            if (question.isDerived()) {
+                String derived = derivationRegistry.derive(question.getDerivation(), ctx);
+                return blank(derived) ? ResolvedValue.none() : ResolvedValue.fromDerived(derived);
+            }
+            // LIST questions: generic store first (latest submitted array),
+            // else project from the profile JSON column named by sourceList
+            if (question.isList()) return resolveList(question, ctx);
+            // Generic-storage questions bypass the typed switch entirely
+            if (question.isGenericStorage()) return genericLookup(question.getKey(), ctx);
             return dispatchByKey(question.getKey(), ctx);
         } catch (Exception e) {
             log.warn("DataResolver failed for key '{}': {}", question.getKey(), e.getMessage());
@@ -93,6 +124,7 @@ public class DataResolver {
             case "beneficiary.gender"            -> profileStr(ctx, p -> p.getGender());
             case "beneficiary.phone"             -> profileStr(ctx, p -> p.getPhone());
             case "beneficiary.uscisAccountNumber"-> profileStr(ctx, p -> p.getUscisOnlineAccountNumber());
+            case "beneficiary.provinceOfBirth"   -> profileStr(ctx, p -> p.getProvinceOfBirth());
             case "beneficiary.addressLine1"      -> addressField(ctx, "line1");
             case "beneficiary.addressCity"       -> addressField(ctx, "city");
             case "beneficiary.addressState"      -> addressField(ctx, "state");
@@ -108,6 +140,7 @@ public class DataResolver {
             case "beneficiary.entryDate"         -> profileDate(ctx, p -> p.getEntryDate());
             case "beneficiary.alienNumber"       -> profileEncrypted(ctx, p -> p.getAlienNumberEnc());
             case "beneficiary.ssn"               -> profileEncrypted(ctx, p -> p.getSsnEnc());
+            case "beneficiary.sevisNumber"       -> profileStr(ctx, p -> p.getSevisNumber());
 
             // ── beneficiary.current_status ────────────────────────────────────
             case "beneficiary.currentVisaType"   -> profileStr(ctx, p -> p.getCurrentVisaType());
@@ -128,24 +161,100 @@ public class DataResolver {
             case "employer.zipCode"       -> orgStr(ctx.employerOrg(), o -> o.getZipCode());
             case "employer.phone"         -> orgStr(ctx.employerOrg(), o -> o.getContactName()); // best available
             case "employer.website"       -> orgStr(ctx.employerOrg(), o -> o.getWebsite());
+            case "employer.email"                  -> orgStr(ctx.employerOrg(), o -> o.getContactEmail());
+            case "employer.country"                -> orgStr(ctx.employerOrg(), o -> o.getCountry());
+            case "employer.nonprofitOrGovResearch" -> orgBool(ctx.employerOrg(), ImmOrg::getNonprofitOrGovResearch);
+            case "employer.businessType"           -> orgStr(ctx.employerOrg(), o -> o.getBusinessType());
+            case "employer.yearEstablished"        -> orgNum(ctx.employerOrg(), ImmOrg::getYearEstablished);
+            case "employer.employeeCount"          -> orgNum(ctx.employerOrg(), ImmOrg::getEmployeeCount);
+            case "employer.grossAnnualIncome"      -> orgNum(ctx.employerOrg(), ImmOrg::getGrossAnnualIncome);
+            case "employer.netAnnualIncome"        -> orgNum(ctx.employerOrg(), ImmOrg::getNetAnnualIncome);
+            case "employer.smallEmployerFlag"      -> orgBool(ctx.employerOrg(), ImmOrg::getSmallEmployerFlag);
 
             // ── job.job_details — sourced from most recent employment entry ───
+            // (job.socCode / salaryAmount / hoursPerWeek are storage="generic"
+            //  and never reach this switch)
             case "job.title"        -> employmentField(ctx, "title");
             case "job.startDate"    -> employmentField(ctx, "startDate");
-            case "job.socCode"      -> ResolvedValue.none();  // no backing field yet
-            case "job.salaryAmount" -> ResolvedValue.none();  // no backing field yet
-            case "job.hoursPerWeek" -> ResolvedValue.none();  // no backing field yet
 
             // ── attorney.* ────────────────────────────────────────────────────
             case "attorney.firmName" -> orgStr(ctx.lawFirmOrg(), o -> o.getName());
             case "attorney.email"    -> orgStr(ctx.lawFirmOrg(), o -> o.getContactEmail());
             case "attorney.barNumber"-> resolveBarNumber(ctx);
 
-            default -> {
-                log.debug("No resolver for key '{}' — returning none", key);
-                yield ResolvedValue.none();
-            }
+            // Unknown typed key: fall back to the generic store so a stored
+            // answer still surfaces even if the question forgot storage="generic"
+            default -> genericLookup(key, ctx);
         };
+    }
+
+    /** Looks up a plaintext value in the pre-loaded generic answer map. */
+    private ResolvedValue genericLookup(String key, ResolutionContext ctx) {
+        if (ctx.genericAnswers() == null) return ResolvedValue.none();
+        String val = ctx.genericAnswers().get(key);
+        return blank(val) ? ResolvedValue.none() : ResolvedValue.fromStore(val);
+    }
+
+    // ── Repeat groups (LIST questions) ────────────────────────────────────────
+
+    /** CanonicalProfile JSON-array columns a repeatGroup.sourceList may name. */
+    public static final Set<String> KNOWN_SOURCE_LISTS = Set.of(
+            "passportsJson", "travelEntriesJson", "dependentsJson",
+            "priorVisasJson", "educationJson", "employmentJson");
+
+    /**
+     * LIST prefill: a previously stored array (generic store) wins; otherwise
+     * project the profile sourceList column down to the declared itemFields.
+     */
+    private ResolvedValue resolveList(CanonicalQuestion question, ResolutionContext ctx) {
+        ResolvedValue stored = genericLookup(question.getKey(), ctx);
+        if (stored.hasValue() && !isEmptyJsonArray(stored.value())) return stored;
+
+        RepeatGroupSpec spec = question.getRepeatGroup();
+        if (spec == null || blank(spec.getSourceList()) || ctx.profile() == null) {
+            return ResolvedValue.none();
+        }
+        String raw = profileListColumn(ctx.profile(), spec.getSourceList());
+        if (blank(raw)) return ResolvedValue.none();
+        try {
+            List<Map<String, Object>> rows = objectMapper.readValue(
+                    raw, new TypeReference<List<Map<String, Object>>>() {});
+            List<Map<String, String>> projected = new ArrayList<>();
+            for (Map<String, Object> row : rows) {
+                Map<String, String> out = new LinkedHashMap<>();
+                for (RepeatItemField f : spec.getItemFields() != null ? spec.getItemFields() : List.<RepeatItemField>of()) {
+                    Object val = row.get(f.getKey());
+                    // Scalars only — encrypted (*Enc), id, and documentIds never
+                    // appear because they are not declared itemFields
+                    if (val instanceof String s && !s.isBlank()) out.put(f.getKey(), s);
+                    else if (val instanceof Number || val instanceof Boolean) out.put(f.getKey(), String.valueOf(val));
+                }
+                if (!out.isEmpty()) projected.add(out);
+            }
+            if (projected.isEmpty()) return ResolvedValue.none();
+            return ResolvedValue.fromProfile(objectMapper.writeValueAsString(projected));
+        } catch (Exception e) {
+            log.debug("sourceList '{}' parse error for '{}': {}",
+                      spec.getSourceList(), question.getKey(), e.getMessage());
+            return ResolvedValue.none();
+        }
+    }
+
+    /** Maps a sourceList name to the raw profile column value. */
+    private static String profileListColumn(CanonicalProfile p, String sourceList) {
+        return switch (sourceList) {
+            case "passportsJson"     -> p.getPassportsJson();
+            case "travelEntriesJson" -> p.getTravelEntriesJson();
+            case "dependentsJson"    -> p.getDependentsJson();
+            case "priorVisasJson"    -> p.getPriorVisasJson();
+            case "educationJson"     -> p.getEducationJson();
+            case "employmentJson"    -> p.getEmploymentJson();
+            default -> null; // registry warns about unknown names at startup
+        };
+    }
+
+    private static boolean isEmptyJsonArray(String s) {
+        return s != null && s.trim().replaceAll("\\s", "").equals("[]");
     }
 
     // ── Profile helpers ───────────────────────────────────────────────────────
@@ -241,6 +350,18 @@ public class DataResolver {
         if (org == null) return ResolvedValue.none();
         String val = fn.extract(org);
         return blank(val) ? ResolvedValue.none() : ResolvedValue.fromOrg(val);
+    }
+
+    private ResolvedValue orgBool(ImmOrg org, java.util.function.Function<ImmOrg, Boolean> fn) {
+        if (org == null) return ResolvedValue.none();
+        Boolean val = fn.apply(org);
+        return val == null ? ResolvedValue.none() : ResolvedValue.fromOrg(String.valueOf(val));
+    }
+
+    private ResolvedValue orgNum(ImmOrg org, java.util.function.Function<ImmOrg, ?> fn) {
+        if (org == null) return ResolvedValue.none();
+        Object val = fn.apply(org);
+        return val == null ? ResolvedValue.none() : ResolvedValue.fromOrg(String.valueOf(val));
     }
 
     // ── Attorney helpers ──────────────────────────────────────────────────────

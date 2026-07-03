@@ -34,6 +34,11 @@ public class ChecklistTemplateSeeder implements ApplicationRunner {
         all.addAll(i485Templates());
         all.addAll(i140Templates());
         all.addAll(permTemplates());
+        all.addAll(i765Templates());
+        all.addAll(i131Templates());
+        all.addAll(i539Templates());
+        all.addAll(i290bTemplates());
+        all.addAll(i693Templates());
         repo.saveAll(all);
         log.info("Seeded {} checklist templates", all.size());
     }
@@ -113,6 +118,79 @@ public class ChecklistTemplateSeeder implements ApplicationRunner {
             t(ft, "PWD",                 "Wage & Position","Prevailing Wage Determination (from DOL)",            true,  null, 60),
             t(ft, "JOB_DESCRIPTION",     "Wage & Position","Detailed Job Description",                            true,  null, 70),
             t(ft, "RECRUITMENT_REPORT",  "Wage & Position","Recruitment Report Summary",                          true,  null, 80)
+        );
+    }
+
+    // ── I-765 (Application for Employment Authorization) ────────────────────
+
+    private List<ChecklistTemplate> i765Templates() {
+        String ft = "I765";
+        String h4Cond = "{\"caseTypeIn\":[\"H4_EAD\"]}";
+        String gcCond = "{\"caseTypeIn\":[\"GC_EAD\"]}";
+        String i140Cond = "{\"i140Approved\":true}";
+        return List.of(
+            t(ft, "PASSPORT_COPY",     "Personal Documents",         "Passport (copy, photo page)",                       true,  null,     10),
+            t(ft, "PASSPORT_PHOTOS",   "Personal Documents",         "2×2 Passport-Style Photos (2 copies)",              true,  null,     20),
+            t(ft, "I94_RECORD",        "Personal Documents",         "I-94 Arrival/Departure Record",                     true,  null,     30),
+            t(ft, "PRIOR_EAD_COPY",    "Personal Documents",         "Copy of Previous EAD Card (front and back, if renewing/replacing)", false, null, 40),
+            t(ft, "H1B_APPROVAL_NOTICE","Category-Specific Evidence","Spouse's Form I-797 Approval Notice for Form I-129 (H-1B)", true,  h4Cond,   50),
+            t(ft, "MARRIAGE_CERT",     "Category-Specific Evidence", "Marriage Certificate",                              true,  h4Cond,   60),
+            t(ft, "I140_APPROVAL",     "Category-Specific Evidence", "Form I-797 Approval Notice for I-140",              true,  i140Cond, 70),
+            t(ft, "I485_RECEIPT",      "Category-Specific Evidence", "Form I-797 Receipt Notice for Pending I-485",       false, gcCond,   80)
+        );
+    }
+
+    // ── I-131 (Reentry Permit / Advance Parole Document) ────────────────────
+
+    private List<ChecklistTemplate> i131Templates() {
+        String ft = "I131";
+        String i485Cond = "{\"caseTypeIn\":[\"I485\"]}";
+        String gcRenewalCond = "{\"caseTypeIn\":[\"GC_RENEWAL\"]}";
+        return List.of(
+            t(ft, "PASSPORT_COPY",         "Personal Documents",         "Passport (copy, photo page)",                              true,  null,          10),
+            t(ft, "PASSPORT_PHOTOS",       "Personal Documents",         "2×2 Passport-Style Photos (2 copies)",                     true,  null,          20),
+            t(ft, "PRIOR_TRAVEL_DOC_COPY", "Personal Documents",         "Copy of Previously Issued Reentry Permit or Advance Parole Document (if renewing/replacing)", false, null, 30),
+            t(ft, "I485_RECEIPT_NOTICE",   "Category-Specific Evidence", "Form I-797 Receipt Notice for Pending I-485",              true,  i485Cond,      40),
+            t(ft, "GREEN_CARD_COPY",       "Personal Documents",         "Permanent Resident Card (copy, front and back)",           true,  gcRenewalCond, 50),
+            t(ft, "TRAVEL_NEED_EXPLANATION","Category-Specific Evidence","Explanation/Evidence Supporting Need for Travel",          false, null,          60)
+        );
+    }
+
+    // ── I-539 (Application to Extend/Change Nonimmigrant Status) ────────────
+
+    private List<ChecklistTemplate> i539Templates() {
+        String ft = "I539";
+        String h4Cond = "{\"caseTypeIn\":[\"H4\"]}";
+        return List.of(
+            t(ft, "PASSPORT_COPY",           "Personal Documents",         "Passport (copy, photo page)",                          true,  null,   10),
+            t(ft, "I94_RECORD",              "Personal Documents",         "I-94 Arrival/Departure Record",                        true,  null,   20),
+            t(ft, "H1B_APPROVAL_NOTICE",     "Category-Specific Evidence", "Principal H-1B Holder's Form I-797 Approval Notice",   true,  h4Cond, 30),
+            t(ft, "MARRIAGE_CERT",           "Category-Specific Evidence", "Marriage Certificate (proof of relationship to principal)", true, h4Cond, 40),
+            t(ft, "PRIOR_STATUS_DOC",        "Personal Documents",         "Evidence of Current/Prior Status (e.g. prior EAD, I-797, or visa stamp)", false, null, 50),
+            t(ft, "FINANCIAL_SUPPORT_EVIDENCE","Category-Specific Evidence","Evidence of Financial Support (if not employed since last admission)", false, null, 60)
+        );
+    }
+
+    // ── I-290B (Notice of Appeal or Motion) ──────────────────────────────────
+
+    private List<ChecklistTemplate> i290bTemplates() {
+        String ft = "I290B";
+        return List.of(
+            t(ft, "UNFAVORABLE_DECISION_NOTICE", "Category-Specific Evidence", "Copy of the Unfavorable Decision Notice Being Appealed", true,  null, 10),
+            t(ft, "BRIEF_OR_EVIDENCE",           "Category-Specific Evidence", "Brief and/or Supporting Evidence",                       false, null, 20),
+            t(ft, "NEW_EVIDENCE_FOR_REOPEN",     "Category-Specific Evidence", "New Factual Evidence Supporting a Motion to Reopen",     false, null, 30),
+            t(ft, "PRECEDENT_DECISIONS",         "Category-Specific Evidence", "Pertinent Precedent Decisions Supporting a Motion to Reconsider", false, null, 40)
+        );
+    }
+
+    // ── I-693 (Report of Immigration Medical Examination and Vaccination Record) ──
+
+    private List<ChecklistTemplate> i693Templates() {
+        String ft = "I693";
+        return List.of(
+            t(ft, "COMPLETED_I693_FORM",   "Category-Specific Evidence", "Completed and Signed Form I-693 from the Civil Surgeon (sealed envelope, if required)", true,  null, 10),
+            t(ft, "VACCINATION_RECORDS",   "Personal Documents",         "Prior Vaccination Records Brought to the Exam",                                       false, null, 20),
+            t(ft, "PRIOR_MEDICAL_RECORDS", "Personal Documents",         "Relevant Prior Medical Records (if applicable)",                                      false, null, 30)
         );
     }
 

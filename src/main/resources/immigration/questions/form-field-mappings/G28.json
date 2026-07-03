@@ -1,0 +1,204 @@
+{
+  "formType": "G28",
+  "sections": {
+    "part1_attorney": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.attorneyUscisOnlineAccountNumber",
+          "pdfFieldName": "form1[0].#subform[0].#area[0].Pt1Line1_USCISOnlineAcctNumber[0]"
+        },
+        {
+          "questionKey": "attorney.lastName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line2a_FamilyName[0]"
+        },
+        {
+          "questionKey": "attorney.firstName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line2b_GivenName[0]"
+        },
+        {
+          "questionKey": "attorney.middleName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line2c_MiddleName[0]"
+        },
+        {
+          "questionKey": "attorney.addressLine1",
+          "pdfFieldName": "form1[0].#subform[0].Line3a_StreetNumber[0]"
+        },
+        {
+          "questionKey": "attorney.addressCity",
+          "pdfFieldName": "form1[0].#subform[0].Line3c_CityOrTown[0]"
+        },
+        {
+          "questionKey": "attorney.addressState",
+          "pdfFieldName": "form1[0].#subform[0].Line3d_State[0]"
+        },
+        {
+          "questionKey": "attorney.addressZip",
+          "pdfFieldName": "form1[0].#subform[0].Line3e_ZipCode[0]"
+        },
+        {
+          "questionKey": "attorney.addressProvince",
+          "pdfFieldName": "form1[0].#subform[0].Line3f_Province[0]"
+        },
+        {
+          "questionKey": "attorney.addressPostalCode",
+          "pdfFieldName": "form1[0].#subform[0].Line3g_PostalCode[0]"
+        },
+        {
+          "questionKey": "attorney.addressCountry",
+          "pdfFieldName": "form1[0].#subform[0].Line3h_Country[0]"
+        },
+        {
+          "questionKey": "attorney.phone",
+          "pdfFieldName": "form1[0].#subform[0].Line4_DaytimeTelephoneNumber[0]"
+        },
+        {
+          "questionKey": "attorney.email",
+          "pdfFieldName": "form1[0].#subform[0].Line7_MobileTelephoneNumber[0]"
+        },
+        {
+          "questionKey": "attorney.licensingAuthority",
+          "pdfFieldName": "form1[0].#subform[0].Pt2Line1a_LicensingAuthority[0]"
+        },
+        {
+          "questionKey": "attorney.barNumber",
+          "pdfFieldName": "form1[0].#subform[0].Pt2Line1b_BarNumber[0]"
+        },
+        {
+          "questionKey": "attorney.subjectToDisciplinaryOrder",
+          "pdfFieldName": "form1[0].#subform[0].Checkbox1dAm[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "attorney.subjectToDisciplinaryOrder",
+          "pdfFieldName": "form1[0].#subform[0].Checkbox1dAmNot[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "attorney.firmName",
+          "pdfFieldName": "form1[0].#subform[0].Pt2Line1d_NameofFirmOrOrganization[0]"
+        }
+      ]
+    },
+    "part3_appearance": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.mostRecentReceiptNumber",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line4_ReceiptNumber[0]"
+        },
+        {
+          "questionKey": "petition.g28MatterDescription",
+          "pdfFieldName": "form1[0].#subform[1].Line1b_ListFormNumber[0]"
+        },
+        {
+          "questionKey": "petition.g28RequestedByRole",
+          "pdfFieldName": "form1[0].#subform[1].Line4_Checkbox[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Applicant"
+        },
+        {
+          "questionKey": "petition.g28RequestedByRole",
+          "pdfFieldName": "form1[0].#subform[1].Line4_Checkbox[3]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Petitioner"
+        },
+        {
+          "questionKey": "petition.g28RequestedByRole",
+          "pdfFieldName": "form1[0].#subform[1].Line4_Checkbox[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Requestor"
+        },
+        {
+          "questionKey": "petition.g28RequestedByRole",
+          "pdfFieldName": "form1[0].#subform[1].Line4_Checkbox[4]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Beneficiary/Derivative"
+        },
+        {
+          "questionKey": "petition.g28RequestedByRole",
+          "pdfFieldName": "form1[0].#subform[1].Line4_Checkbox[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Respondent"
+        }
+      ]
+    },
+    "part3_client": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.lastName",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line5a_FamilyName[0]"
+        },
+        {
+          "questionKey": "beneficiary.firstName",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line5b_GivenName[0]"
+        },
+        {
+          "questionKey": "beneficiary.middleName",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line5c_MiddleName[0]"
+        },
+        {
+          "questionKey": "employer.legalName",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line7a_NameOfEntity[0]"
+        },
+        {
+          "questionKey": "signatory.title",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line7b_TitleofEntity[0]"
+        },
+        {
+          "questionKey": "beneficiary.uscisAccountNumber",
+          "pdfFieldName": "form1[0].#subform[1].#area[1].Pt3Line8_USCISOnlineAcctNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.alienNumber",
+          "pdfFieldName": "form1[0].#subform[1].Pt3Line9_ANumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.phone",
+          "pdfFieldName": "form1[0].#subform[1].Line9_DaytimeTelephoneNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.email",
+          "pdfFieldName": "form1[0].#subform[1].Line11_EMail[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressLine1",
+          "pdfFieldName": "form1[0].#subform[1].Line12a_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressCity",
+          "pdfFieldName": "form1[0].#subform[1].Line12c_CityOrTown[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressState",
+          "pdfFieldName": "form1[0].#subform[1].Line12d_State[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressZip",
+          "pdfFieldName": "form1[0].#subform[1].Line12e_ZipCode[0]"
+        }
+      ]
+    },
+    "part4_client_signature": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.applicationSignatureDate",
+          "pdfFieldName": "form1[0].#subform[2].Pt4Line2b_DateofSignature[0]"
+        }
+      ]
+    },
+    "part5_attorney_signature": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "attorney.signatureDate",
+          "pdfFieldName": "form1[0].#subform[2].Line3_Date[0]"
+        }
+      ]
+    }
+  }
+}

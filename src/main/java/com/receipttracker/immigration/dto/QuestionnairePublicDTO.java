@@ -26,11 +26,22 @@ public record QuestionnairePublicDTO(
             String key,
             String label,
             String sublabel,
-            String type,         // TEXT | TEXT_SENSITIVE | DATE | NUMBER | BOOLEAN | SELECT | TEXTAREA
+            String type,         // TEXT | TEXT_SENSITIVE | DATE | NUMBER | BOOLEAN | SELECT | TEXTAREA | LIST
             boolean required,
             Map<String, Object> validation,
             List<String> options,          // non-null for SELECT type
-            String prefillValue,           // null for TEXT_SENSITIVE or no prefill
-            String prefillSource           // "profile" | "org" | "questionnaire" | "none"
+            String prefillValue,           // null for TEXT_SENSITIVE or no prefill; JSON array string for LIST
+            String prefillSource,          // "profile" | "org" | "questionnaire" | "none"
+            Integer maxRows,               // LIST only
+            List<ItemFieldDTO> itemFields  // LIST only — row-editor column spec
+    ) {}
+
+    /** One column of a LIST question's row editor. */
+    public record ItemFieldDTO(
+            String key,
+            String label,
+            String type,         // TEXT | DATE | NUMBER | SELECT
+            boolean required,
+            List<String> options
     ) {}
 }

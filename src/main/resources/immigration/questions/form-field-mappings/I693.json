@@ -1,0 +1,156 @@
+{
+  "formType": "I693",
+  "sections": {
+    "part1_applicant": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.lastName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line1a_FamilyName[0]"
+        },
+        {
+          "questionKey": "beneficiary.firstName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line1b_GivenName[0]"
+        },
+        {
+          "questionKey": "beneficiary.middleName",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line1c_MiddleName[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressLine1",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line2_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressCity",
+          "pdfFieldName": "form1[0].#subform[0].P1Line2_CityOrTown[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressState",
+          "pdfFieldName": "form1[0].#subform[0].P1Line2_State[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressZip",
+          "pdfFieldName": "form1[0].#subform[0].P1Line2_ZipCode[0]"
+        },
+        {
+          "questionKey": "beneficiary.gender",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line3_Gender[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Male"
+        },
+        {
+          "questionKey": "beneficiary.gender",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line3_Gender[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Female"
+        },
+        {
+          "questionKey": "beneficiary.dateOfBirth",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line3_DateOfBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.cityOfBirth",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line3_CityTownVillageofBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.countryOfBirth",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line3_CountryofBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.alienNumber",
+          "pdfFieldName": "form1[0].#subform[0].#area[0].Pt1Line3e_AlienNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.uscisAccountNumber",
+          "pdfFieldName": "form1[0].#subform[0].Pt1Line3f_USCISOnlineAcctNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.i693VaccinationOnlyEligible",
+          "pdfFieldName": "form1[0].#subform[0].Pt1_Line4_ImmMedExamReq[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        }
+      ]
+    },
+    "part2_contact_signature": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.phone",
+          "pdfFieldName": "form1[0].#subform[1].Pt2Line3_DaytimePhone[0]"
+        },
+        {
+          "questionKey": "beneficiary.email",
+          "pdfFieldName": "form1[0].#subform[1].Pt2Line5_EmailAddress[0]"
+        },
+        {
+          "questionKey": "beneficiary.applicationSignatureDate",
+          "pdfFieldName": "form1[0].#subform[1].Pt2Line6_DateofSignature[0]"
+        }
+      ]
+    },
+    "part4_preparer": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "attorney.firmName",
+          "pdfFieldName": "form1[0].#subform[2].Pt4Line2_PreparerNameofBusinessorOrgName[0]"
+        },
+        {
+          "questionKey": "attorney.email",
+          "pdfFieldName": "form1[0].#subform[2].Pt4Line5_EmailAddress[0]"
+        }
+      ]
+    },
+    "part6_exam_summary": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.medicalExamResult",
+          "pdfFieldName": "form1[0].#subform[3].Pt6Line1_OverallFinding[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "NoCondition"
+        },
+        {
+          "questionKey": "beneficiary.medicalExamResult",
+          "pdfFieldName": "form1[0].#subform[3].Pt6Line1_OverallFinding[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "ClassB"
+        },
+        {
+          "questionKey": "beneficiary.medicalExamResult",
+          "pdfFieldName": "form1[0].#subform[3].Pt6Line1_OverallFinding[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "ClassA"
+        },
+        {
+          "questionKey": "beneficiary.medicalExamDate",
+          "pdfFieldName": "form1[0].#subform[3].Pt6Line2_DateoExam[0]"
+        }
+      ]
+    },
+    "part10_vaccination_result": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.vaccinationRequirementsStatus",
+          "pdfFieldName": "form1[0].#subform[12].P10_Results[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Completed"
+        },
+        {
+          "questionKey": "beneficiary.vaccinationRequirementsStatus",
+          "pdfFieldName": "form1[0].#subform[12].P10_Results[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "DoesNotMeet"
+        },
+        {
+          "questionKey": "beneficiary.vaccinationRequirementsStatus",
+          "pdfFieldName": "form1[0].#subform[12].P10_Results[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "WillRequestWaiver"
+        }
+      ]
+    }
+  }
+}

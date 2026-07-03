@@ -9,6 +9,7 @@ import com.receipttracker.immigration.model.question.CanonicalQuestion;
 import com.receipttracker.immigration.model.question.FormFieldEntry;
 import com.receipttracker.immigration.model.question.FormFieldMapping;
 import com.receipttracker.immigration.model.question.FormSectionMapping;
+import com.receipttracker.immigration.model.question.RepeatGroupSpec;
 import com.receipttracker.immigration.repository.*;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
@@ -22,7 +23,6 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
-import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -138,7 +138,8 @@ public class ImmPdfGenerationService {
                     "Pre-generation checks failed: " + String.join("; ", preflightErrors));
         }
 
-        // Check 4: required answers present
+        // Check 4: required answers present — includes required reviewOnly
+        // attestations, which only an attorney override can satisfy
         List<CanonicalQuestion> questions = questionRegistry.getQuestionsForForms(formTypes);
         List<FilingPackageAnswer> answers = answerRepo.findByFilingPackageId(packageId);
         Map<String, FilingPackageAnswer> answerMap = answers.stream()
@@ -367,11 +368,15 @@ public class ImmPdfGenerationService {
                 // AcroForm fields — so the output looks blank. Remove XFA so the filled AcroForm
                 // is what renders. (setValue already generates the appearance streams flatten() bakes in.)
                 acroForm.getCOSObject().removeItem(COSName.XFA);
+                // LIST answers parsed once per questionKey, not once per repeat entry
+                Map<String, List<Map<String, Object>>> listRowsCache = new HashMap<>();
+                Set<String> overflowWarned = new HashSet<>();
                 for (FormSectionMapping section : mapping.getSections().values()) {
                     if (section.getFields() == null) continue;
                     for (FormFieldEntry entry : section.getFields()) {
                         String questionKey = entry.getQuestionKey();
                         String pdfFieldName = entry.getPdfFieldName();
+                        String fieldType = entry.getPdfFieldType() != null ? entry.getPdfFieldType() : "text";
 
                         FilingPackageAnswer ans = answerMap.get(questionKey);
                         boolean filled = false;
@@ -383,26 +388,32 @@ public class ImmPdfGenerationService {
                                     ? encryptionService.decrypt(ans.getValueJson())
                                     : ans.getValueJson();
 
-                            PDField field = acroForm.getField(pdfFieldName);
-                            if (field != null) {
-                                try {
-                                    field.setValue(value);
-                                    filled = true;
-                                } catch (Exception e) {
-                                    log.warn("Could not fill field {} on {}: {}", pdfFieldName, formType, e.getMessage());
-                                }
+                            // Repeat entries read row[repeatIndex].itemField of the JSON-array answer;
+                            // a missing row/field just leaves the PDF field unfilled
+                            if (entry.isRepeatEntry()) {
+                                value = extractListCell(q, entry, value, listRowsCache, overflowWarned);
+                            }
+                            if (value != null && !value.isBlank()) {
+                                // Type-aware fill: text / checkbox / radio + valueMap translation
+                                filled = PdfFieldApplier.apply(acroForm, entry, value);
                             }
                             value = null; // clear from memory immediately
                         }
 
-                        auditEntries.add(new LinkedHashMap<>(Map.of(
+                        Map<String, Object> auditEntry = new LinkedHashMap<>(Map.of(
                                 "questionKey", questionKey,
                                 "pdfField", pdfFieldName,
                                 "source", source,
                                 "versionId", fv.getId(),
                                 "filled", filled,
-                                "formType", formType
-                        )));
+                                "formType", formType,
+                                "pdfFieldType", fieldType
+                        ));
+                        if (entry.isRepeatEntry()) {
+                            auditEntry.put("repeatIndex", entry.getRepeatIndex());
+                            auditEntry.put("itemField", entry.getItemField());
+                        }
+                        auditEntries.add(auditEntry);
                     }
                 }
                 acroForm.flatten();
@@ -415,6 +426,40 @@ public class ImmPdfGenerationService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to fill PDF for " + formType + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * Row/column extraction for a repeat mapping entry: parses the LIST
+     * answer (cached per questionKey) and returns row[repeatIndex].itemField,
+     * or null when the row or field is absent. Rows beyond the question's
+     * maxRows are ignored with a one-time WARN — USCIS overflow sheets are
+     * out of scope.
+     */
+    String extractListCell(CanonicalQuestion q, FormFieldEntry entry, String jsonArray,
+                           Map<String, List<Map<String, Object>>> cache,
+                           Set<String> overflowWarned) {
+        String key = entry.getQuestionKey();
+        List<Map<String, Object>> rows = cache.computeIfAbsent(key, k -> {
+            try {
+                return objectMapper.readValue(jsonArray, new TypeReference<List<Map<String, Object>>>() {});
+            } catch (Exception e) {
+                log.warn("LIST answer '{}' is not a JSON array — repeat fields left unfilled: {}",
+                         k, e.getMessage());
+                return List.of();
+            }
+        });
+        int maxRows = q != null && q.getRepeatGroup() != null
+                ? q.getRepeatGroup().effectiveMaxRows() : RepeatGroupSpec.DEFAULT_MAX_ROWS;
+        if (rows.size() > maxRows && overflowWarned.add(key)) {
+            log.warn("LIST answer '{}' has {} rows but maxRows is {} — extra rows ignored",
+                     key, rows.size(), maxRows);
+        }
+        int idx = entry.getRepeatIndex();
+        if (idx < 0 || idx >= Math.min(rows.size(), maxRows)) return null;
+        Object cell = rows.get(idx).get(entry.getItemField());
+        if (cell == null) return null;
+        String s = String.valueOf(cell);
+        return s.isBlank() ? null : s;
     }
 
     // ── Cover sheet ───────────────────────────────────────────────────────────

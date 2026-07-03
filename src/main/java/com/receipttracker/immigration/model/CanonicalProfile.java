@@ -36,6 +36,7 @@ public class CanonicalProfile {
     @Column(name = "middle_name")        private String middleName;
     @Column(name = "date_of_birth")      private LocalDate dateOfBirth;
     @Column(name = "country_of_birth")   private String countryOfBirth;
+    @Column(name = "province_of_birth")  private String provinceOfBirth;
     @Column(name = "citizenship_country") private String citizenshipCountry;
     @Column(name = "gender")             private String gender;
 
@@ -51,6 +52,7 @@ public class CanonicalProfile {
     // ── US entry & current status ──────────────────────────────────────────────
     @Column(name = "port_of_entry")    private String portOfEntry;
     @Column(name = "entry_date")       private LocalDate entryDate;
+    @Column(name = "sevis_number")     private String sevisNumber;
 
     // TODO: verify field against official form instruction (I-94 admission number is 11 digits)
     // Legacy plain column — kept for backward compat; prefer i94_number_enc for new writes

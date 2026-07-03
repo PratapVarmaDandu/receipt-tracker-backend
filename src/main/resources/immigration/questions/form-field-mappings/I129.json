@@ -4,56 +4,928 @@
     "part1_petitioner": {
       "owner": "EMPLOYER",
       "fields": [
-        { "questionKey": "employer.legalName",    "pdfFieldName": "Pt1Line1_LegalName" },
-        { "questionKey": "employer.ein",           "pdfFieldName": "Pt1Line4a_EIN" },
-        { "questionKey": "employer.addressLine1",  "pdfFieldName": "Pt1Line7_StreetNumber" },
-        { "questionKey": "employer.city",          "pdfFieldName": "Pt1Line7_City" },
-        { "questionKey": "employer.state",         "pdfFieldName": "Pt1Line7_State" },
-        { "questionKey": "employer.zipCode",       "pdfFieldName": "Pt1Line7_ZipCode" },
-        { "questionKey": "employer.phone",         "pdfFieldName": "Pt1Line10_DaytimePhone" },
-        { "questionKey": "employer.website",       "pdfFieldName": "Pt1Line12_Website" }
+        {
+          "questionKey": "employer.legalName",
+          "pdfFieldName": "form1[0].#subform[0].Line3_CompanyorOrgName[0]"
+        },
+        {
+          "questionKey": "employer.ein",
+          "pdfFieldName": "form1[0].#subform[0].TextField1[0]"
+        },
+        {
+          "questionKey": "employer.addressLine1",
+          "pdfFieldName": "form1[0].#subform[0].Line7b_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "employer.city",
+          "pdfFieldName": "form1[0].#subform[0].Line_CityTown[0]"
+        },
+        {
+          "questionKey": "employer.state",
+          "pdfFieldName": "form1[0].#subform[0].P1_Line3_State[0]"
+        },
+        {
+          "questionKey": "employer.zipCode",
+          "pdfFieldName": "form1[0].#subform[0].P1_Line3_ZipCode[0]"
+        },
+        {
+          "questionKey": "employer.country",
+          "pdfFieldName": "form1[0].#subform[0].P1_Line3_Country[0]"
+        },
+        {
+          "questionKey": "employer.phone",
+          "pdfFieldName": "form1[0].#subform[0].Line2_DaytimePhoneNumber1_Part8[0]"
+        },
+        {
+          "questionKey": "employer.email",
+          "pdfFieldName": "form1[0].#subform[0].Line9_EmailAddress[0]"
+        },
+        {
+          "questionKey": "employer.nonprofitOrGovResearch",
+          "pdfFieldName": "form1[0].#subform[0].P1Line6_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.nonprofitOrGovResearch",
+          "pdfFieldName": "form1[0].#subform[0].P1Line6_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        }
+      ]
+    },
+    "part2_petition": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.classificationSymbol",
+          "pdfFieldName": "form1[0].#subform[1].Part2_ClassificationSymbol[0]"
+        },
+        {
+          "questionKey": "petition.basisForClassification",
+          "pdfFieldName": "form1[0].#subform[1].new[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "new employment"
+        },
+        {
+          "questionKey": "petition.basisForClassification",
+          "pdfFieldName": "form1[0].#subform[1].continuation[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "continuation"
+        },
+        {
+          "questionKey": "petition.basisForClassification",
+          "pdfFieldName": "form1[0].#subform[1].change[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "change of employer"
+        },
+        {
+          "questionKey": "petition.basisForClassification",
+          "pdfFieldName": "form1[0].#subform[1].amended[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "amended petition"
+        },
+        {
+          "questionKey": "petition.requestedAction",
+          "pdfFieldName": "form1[0].#subform[1].P2Checkbox4[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "notify office"
+        },
+        {
+          "questionKey": "petition.requestedAction",
+          "pdfFieldName": "form1[0].#subform[1].P2Checkbox4[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "extend"
+        },
+        {
+          "questionKey": "petition.totalWorkers",
+          "pdfFieldName": "form1[0].#subform[1].TtlNumbersofWorker[0]"
+        }
+      ]
+    },
+    "part2_petition_beneficiary": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "petition.mostRecentReceiptNumber",
+          "pdfFieldName": "form1[0].#subform[1].Line1_ReceiptNumber[0]"
+        }
       ]
     },
     "part3_beneficiary": {
       "owner": "BENEFICIARY",
       "fields": [
-        { "questionKey": "beneficiary.lastName",        "pdfFieldName": "Pt3Line1_FamilyName" },
-        { "questionKey": "beneficiary.firstName",       "pdfFieldName": "Pt3Line1_GivenName" },
-        { "questionKey": "beneficiary.middleName",      "pdfFieldName": "Pt3Line1_MiddleName" },
-        { "questionKey": "beneficiary.dateOfBirth",     "pdfFieldName": "Pt3Line3_DateOfBirth" },
-        { "questionKey": "beneficiary.countryOfBirth",  "pdfFieldName": "Pt3Line4_CountryOfBirth" },
-        { "questionKey": "beneficiary.citizenshipCountry", "pdfFieldName": "Pt3Line5_CountryOfCitizenship" },
-        { "questionKey": "beneficiary.passportNumber",  "pdfFieldName": "Pt3Line6_PassportNumber" },
-        { "questionKey": "beneficiary.passportCountry", "pdfFieldName": "Pt3Line7_PassportIssuedBy" },
-        { "questionKey": "beneficiary.passportIssueDate", "pdfFieldName": "Pt3Line8_PassportIssueDate" },
-        { "questionKey": "beneficiary.passportExpiryDate", "pdfFieldName": "Pt3Line9_PassportExpDate" },
-        { "questionKey": "beneficiary.i94Number",       "pdfFieldName": "Pt3Line11_I94Number" },
-        { "questionKey": "beneficiary.currentVisaType", "pdfFieldName": "Pt3Line12a_StatusVisaClass" },
-        { "questionKey": "beneficiary.currentVisaExpiry", "pdfFieldName": "Pt3Line12b_StatusExpDate" },
-        { "questionKey": "beneficiary.addressLine1",    "pdfFieldName": "Pt3Line14_StreetNumber" },
-        { "questionKey": "beneficiary.addressCity",     "pdfFieldName": "Pt3Line14_City" },
-        { "questionKey": "beneficiary.addressState",    "pdfFieldName": "Pt3Line14_State" },
-        { "questionKey": "beneficiary.addressZip",      "pdfFieldName": "Pt3Line14_ZipCode" },
-        { "questionKey": "beneficiary.phone",           "pdfFieldName": "Pt3Line16_DaytimePhone" },
-        { "questionKey": "beneficiary.uscisAccountNumber", "pdfFieldName": "Pt3Line20_USCISAccountNumber" }
+        {
+          "questionKey": "beneficiary.lastName",
+          "pdfFieldName": "form1[0].#subform[1].Part3_Line2_FamilyName[0]"
+        },
+        {
+          "questionKey": "beneficiary.firstName",
+          "pdfFieldName": "form1[0].#subform[1].Part3_Line2_GivenName[0]"
+        },
+        {
+          "questionKey": "beneficiary.middleName",
+          "pdfFieldName": "form1[0].#subform[1].Part3_Line2_MiddleName[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 0,
+          "itemField": "lastName",
+          "pdfFieldName": "form1[0].#subform[2].Line3_FamilyName1[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 0,
+          "itemField": "firstName",
+          "pdfFieldName": "form1[0].#subform[2].Line3_GivenName1[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 0,
+          "itemField": "middleName",
+          "pdfFieldName": "form1[0].#subform[2].Line3_MiddleName1[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 1,
+          "itemField": "lastName",
+          "pdfFieldName": "form1[0].#subform[2].Line3_FamilyName2[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 1,
+          "itemField": "firstName",
+          "pdfFieldName": "form1[0].#subform[2].Line3_GivenName2[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 1,
+          "itemField": "middleName",
+          "pdfFieldName": "form1[0].#subform[2].Line3_MiddleName2[0]"
+        },
+        {
+          "questionKey": "beneficiary.gender",
+          "pdfFieldName": "form1[0].#subform[2].Line1_Gender_P3[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Male"
+        },
+        {
+          "questionKey": "beneficiary.gender",
+          "pdfFieldName": "form1[0].#subform[2].Line1_Gender_P3[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Female"
+        },
+        {
+          "questionKey": "beneficiary.dateOfBirth",
+          "pdfFieldName": "form1[0].#subform[2].Line6_DateOfBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.ssn",
+          "pdfFieldName": "form1[0].#subform[2].Line5_SSN[0]"
+        },
+        {
+          "questionKey": "beneficiary.alienNumber",
+          "pdfFieldName": "form1[0].#subform[2].Line1_AlienNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.countryOfBirth",
+          "pdfFieldName": "form1[0].#subform[2].Part3Line4_CountryOfBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.provinceOfBirth",
+          "pdfFieldName": "form1[0].#subform[2].Part4Line3_DProvince[0]"
+        },
+        {
+          "questionKey": "beneficiary.citizenshipCountry",
+          "pdfFieldName": "form1[0].#subform[2].Part3Line4_CountryOfCitizenship[0]"
+        },
+        {
+          "questionKey": "beneficiary.i94Number",
+          "pdfFieldName": "form1[0].#subform[2].Part3Line5_ArrivalDeparture[0]"
+        },
+        {
+          "questionKey": "beneficiary.passportNumber",
+          "pdfFieldName": "form1[0].#subform[2].Part3Line5_PassportorTravDoc[0]"
+        },
+        {
+          "questionKey": "beneficiary.passportIssueDate",
+          "pdfFieldName": "form1[0].#subform[2].Line11e_ExpDate[1]"
+        },
+        {
+          "questionKey": "beneficiary.passportExpiryDate",
+          "pdfFieldName": "form1[0].#subform[2].Line11e_ExpDate[0]"
+        },
+        {
+          "questionKey": "beneficiary.passportCountry",
+          "pdfFieldName": "form1[0].#subform[2].Line_CountryOfIssuance[0]"
+        },
+        {
+          "questionKey": "beneficiary.currentVisaType",
+          "pdfFieldName": "form1[0].#subform[2].Line11g_CurrentNon[0]"
+        },
+        {
+          "questionKey": "beneficiary.currentVisaExpiry",
+          "pdfFieldName": "form1[0].#subform[2].Line11h_DateStatusExpires[0]"
+        },
+        {
+          "questionKey": "beneficiary.sevisNumber",
+          "pdfFieldName": "form1[0].#subform[2].Line5_SEVIS[0]"
+        },
+        {
+          "questionKey": "beneficiary.eadCardNumber",
+          "pdfFieldName": "form1[0].#subform[2].Line5_EAD[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressLine1",
+          "pdfFieldName": "form1[0].#subform[2].Line8a_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressCity",
+          "pdfFieldName": "form1[0].#subform[2].Line8d_CityTown[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressState",
+          "pdfFieldName": "form1[0].#subform[2].Line8e_State[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressZip",
+          "pdfFieldName": "form1[0].#subform[2].Line8f_ZipCode[0]"
+        }
+      ]
+    },
+    "part4_processing": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.beneficiaryHasValidPassport",
+          "pdfFieldName": "form1[0].#subform[3].P4Line2_Checkbox[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.beneficiaryHasValidPassport",
+          "pdfFieldName": "form1[0].#subform[3].P4Line2_Checkbox[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.replacementI94Requested",
+          "pdfFieldName": "form1[0].#subform[3].P4Line4_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.replacementI94Requested",
+          "pdfFieldName": "form1[0].#subform[3].P4Line4_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.dependentsFilingWithPetition",
+          "pdfFieldName": "form1[0].#subform[3].P4Line5_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.dependentsFilingWithPetition",
+          "pdfFieldName": "form1[0].#subform[3].P4Line5_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.beneficiaryInRemovalProceedings",
+          "pdfFieldName": "form1[0].#subform[3].P4Line6_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.beneficiaryInRemovalProceedings",
+          "pdfFieldName": "form1[0].#subform[3].P4Line6_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.priorClassificationGranted",
+          "pdfFieldName": "form1[0].#subform[3].P4Line8a_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.priorClassificationGranted",
+          "pdfFieldName": "form1[0].#subform[3].P4Line8a_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.priorClassificationDenied",
+          "pdfFieldName": "form1[0].#subform[3].P4Line8b_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.priorClassificationDenied",
+          "pdfFieldName": "form1[0].#subform[3].P4Line8b_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.priorPetitionsFiledForBeneficiary",
+          "pdfFieldName": "form1[0].#subform[3].P4Line9_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.priorPetitionsFiledForBeneficiary",
+          "pdfFieldName": "form1[0].#subform[3].P4Line9_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        }
       ]
     },
     "part5_job": {
       "owner": "EMPLOYER",
       "fields": [
-        { "questionKey": "job.title",        "pdfFieldName": "Pt5Line1_JobTitle" },
-        { "questionKey": "job.socCode",      "pdfFieldName": "Pt5Line2_SOCCode" },
-        { "questionKey": "job.startDate",    "pdfFieldName": "Pt5Line7_StartDate" },
-        { "questionKey": "job.salaryAmount", "pdfFieldName": "Pt5Line9a_WageAmount" },
-        { "questionKey": "job.hoursPerWeek", "pdfFieldName": "Pt5Line8_HoursPerWeek" }
+        {
+          "questionKey": "job.title",
+          "pdfFieldName": "form1[0].#subform[4].Part5_Q1_JobTitle[0]"
+        },
+        {
+          "questionKey": "job.lcaEtaCaseNumber",
+          "pdfFieldName": "form1[0].#subform[4].Part5_Q2_LCAorETA[0]"
+        },
+        {
+          "questionKey": "job.itineraryIncluded",
+          "pdfFieldName": "form1[0].#subform[4].P5Line4_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "job.itineraryIncluded",
+          "pdfFieldName": "form1[0].#subform[4].P5Line4_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "job.offSiteWork",
+          "pdfFieldName": "form1[0].#subform[4].P5Line5_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "job.offSiteWork",
+          "pdfFieldName": "form1[0].#subform[4].P5Line5_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "job.fullTime",
+          "pdfFieldName": "form1[0].#subform[4].P5Line7_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "job.fullTime",
+          "pdfFieldName": "form1[0].#subform[4].P5Line7_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "job.hoursPerWeek",
+          "pdfFieldName": "form1[0].#subform[4].P5Line9_Hours[0]"
+        },
+        {
+          "questionKey": "job.salaryAmount",
+          "pdfFieldName": "form1[0].#subform[4].Line8_Wages[0]"
+        },
+        {
+          "questionKey": "job.wageUnit",
+          "pdfFieldName": "form1[0].#subform[4].Line8_Per[0]"
+        },
+        {
+          "questionKey": "job.otherCompensation",
+          "pdfFieldName": "form1[0].#subform[4].Line10_Explanation[0]"
+        },
+        {
+          "questionKey": "job.startDate",
+          "pdfFieldName": "form1[0].#subform[4].Part5_Q10_DateFrom[0]"
+        },
+        {
+          "questionKey": "job.endDate",
+          "pdfFieldName": "form1[0].#subform[4].Part5_Q10_DateTo[0]"
+        },
+        {
+          "questionKey": "employer.businessType",
+          "pdfFieldName": "form1[0].#subform[5].Part5Line12_TypeofBusiness[0]"
+        },
+        {
+          "questionKey": "employer.yearEstablished",
+          "pdfFieldName": "form1[0].#subform[5].P5Line13_YearEstablished[0]"
+        },
+        {
+          "questionKey": "employer.employeeCount",
+          "pdfFieldName": "form1[0].#subform[5].P5Line14_NumberofEmployees[0]"
+        },
+        {
+          "questionKey": "employer.smallEmployerFlag",
+          "pdfFieldName": "form1[0].#subform[5].P5Line15_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.smallEmployerFlag",
+          "pdfFieldName": "form1[0].#subform[5].P5Line15_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.grossAnnualIncome",
+          "pdfFieldName": "form1[0].#subform[5].Line15_GrossAnnualIncome[0]"
+        },
+        {
+          "questionKey": "employer.netAnnualIncome",
+          "pdfFieldName": "form1[0].#subform[5].Line16_NetAnnualIncome[0]"
+        }
       ]
     },
-    "part6_attorney": {
+    "part6_export_control": {
       "owner": "ATTORNEY",
       "fields": [
-        { "questionKey": "attorney.barNumber", "pdfFieldName": "Pt6Line4_StateBarNumber" },
-        { "questionKey": "attorney.firmName",  "pdfFieldName": "Pt6Line2_FirmOrganizationName" },
-        { "questionKey": "attorney.email",     "pdfFieldName": "Pt6Line8_Email" }
+        {
+          "questionKey": "petition.exportControlLicenseRequired",
+          "pdfFieldName": "form1[0].#subform[5].NoDeemed[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.exportControlLicenseRequired",
+          "pdfFieldName": "form1[0].#subform[5].Deemed[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        }
+      ]
+    },
+    "part7_signatory": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "signatory.lastName",
+          "pdfFieldName": "form1[0].#subform[5].Line1a_PetitionerLastName[0]"
+        },
+        {
+          "questionKey": "signatory.firstName",
+          "pdfFieldName": "form1[0].#subform[5].Line1b_PetitionerFirstName[0]"
+        },
+        {
+          "questionKey": "signatory.title",
+          "pdfFieldName": "form1[0].#subform[5].Line1a_PetitionerLastName[1]"
+        },
+        {
+          "questionKey": "signatory.signatureDate",
+          "pdfFieldName": "form1[0].#subform[6].Line1b_DateofSignature[0]"
+        },
+        {
+          "questionKey": "signatory.phone",
+          "pdfFieldName": "form1[0].#subform[6].Pt7Line3_DaytimePhoneNumber1[0]"
+        },
+        {
+          "questionKey": "signatory.email",
+          "pdfFieldName": "form1[0].#subform[6].Pt7Line3_EmailAddress[0]"
+        }
+      ]
+    },
+    "part8_preparer": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "attorney.firmName",
+          "pdfFieldName": "form1[0].#subform[6].Line_BusinessName[0]"
+        },
+        {
+          "questionKey": "attorney.email",
+          "pdfFieldName": "form1[0].#subform[6].EmailAddress[0]"
+        }
+      ]
+    },
+    "h_classification_supplement": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.classificationSymbol",
+          "pdfFieldName": "form1[0].#subform[13].SubHLine4_class[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "H-1B"
+        },
+        {
+          "questionKey": "petition.h1bRegistrationConfirmationNumber",
+          "pdfFieldName": "form1[0].#subform[13].SubHLine5_ConfirmationNum[0]"
+        },
+        {
+          "questionKey": "beneficiary.passportNumber",
+          "pdfFieldName": "form1[0].#subform[15].ClassHLine5b_PassportorTravDoc[0]"
+        },
+        {
+          "questionKey": "beneficiary.passportCountry",
+          "pdfFieldName": "form1[0].#subform[15].ClassHLine5b_CountryOfIssuance[0]"
+        },
+        {
+          "questionKey": "beneficiary.passportExpiryDate",
+          "pdfFieldName": "form1[0].#subform[15].ClassHLine5b_ExpDate[0]"
+        },
+        {
+          "questionKey": "petition.beneficiaryControllingInterest",
+          "pdfFieldName": "form1[0].#subform[15].Line8a_Check[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.beneficiaryControllingInterest",
+          "pdfFieldName": "form1[0].#subform[15].Line8a_Check[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.beneficiaryControllingInterestExplanation",
+          "pdfFieldName": "form1[0].#subform[15].Line8b_Explain[0]"
+        },
+        {
+          "questionKey": "job.proposedDuties",
+          "pdfFieldName": "form1[0].#subform[15].Line1_Duties[0]"
+        },
+        {
+          "questionKey": "beneficiary.workExperienceSummary",
+          "pdfFieldName": "form1[0].#subform[15].Line2_SummaryofWorkExperience[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 0,
+          "itemField": "issueDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row2[0].DateFrom_Line1[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 0,
+          "itemField": "expiryDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row2[0].DateTo_Line1[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 1,
+          "itemField": "issueDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row3[0].DateFrom_Line2[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 1,
+          "itemField": "expiryDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row3[0].DateTo_Line2[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 2,
+          "itemField": "issueDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row4[0].DateFrom_Line3[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 2,
+          "itemField": "expiryDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row4[0].DateTo_Line3[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 3,
+          "itemField": "issueDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row5[0].DateFrom_Line4[0]"
+        },
+        {
+          "questionKey": "beneficiary.priorStays",
+          "repeatIndex": 3,
+          "itemField": "expiryDate",
+          "pdfFieldName": "form1[0].#subform[13].Table1[1].Row5[0].DateTo_Line4[0]"
+        }
+      ]
+    },
+    "h1b_data_collection_supplement": {
+      "owner": "EMPLOYER",
+      "fields": [
+        {
+          "questionKey": "employer.h1bDependentEmployer",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1a_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.h1bDependentEmployer",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1a_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.willfulViolatorHistory",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1b_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.willfulViolatorHistory",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1b_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.employs50PlusFlag",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1d_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.employs50PlusFlag",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1d_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.over50PercentH1BL1Flag",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1d1_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.over50PercentH1BL1Flag",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1d1_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].a_no_diploma[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "No Diploma"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].b_HSDiploma[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "High School Diploma"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].c_some_college[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Some College"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].d_collegeplus[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "College, No Degree"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].e_AssociateDegree[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Associate's Degree"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].f_BachelorDegree[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Bachelor's Degree"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].g_MasterDegree[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Master's Degree"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].h_ProfessionalDegree[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Professional Degree"
+        },
+        {
+          "questionKey": "beneficiary.highestEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].i_DoctorateDegree[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Doctorate Degree"
+        },
+        {
+          "questionKey": "beneficiary.fieldOfStudy",
+          "pdfFieldName": "form1[0].#subform[22].PartA_q3_Field_of_Study[0]"
+        },
+        {
+          "questionKey": "job.annualRateOfPay",
+          "pdfFieldName": "form1[0].#subform[22].Line4_RateofPayPerYear[0]"
+        },
+        {
+          "questionKey": "job.naicsCode",
+          "pdfFieldName": "form1[0].#subform[22].Line2f[0].Line6_NAICSCode[0]"
+        },
+        {
+          "questionKey": "job.requiredEducationLevel",
+          "pdfFieldName": "form1[0].#subform[22].Line7_Education[0]"
+        },
+        {
+          "questionKey": "job.requiredFieldOfStudy",
+          "pdfFieldName": "form1[0].#subform[22].Line8_FieldofStudy[0]"
+        },
+        {
+          "questionKey": "job.requiredYearsExperience",
+          "pdfFieldName": "form1[0].#subform[22].Line9_YearsofExperience[0]"
+        },
+        {
+          "questionKey": "job.requiredSpecialSkills",
+          "pdfFieldName": "form1[0].#subform[22].Line10_SpecialSkills[0]"
+        },
+        {
+          "questionKey": "job.supervisoryInfo",
+          "pdfFieldName": "form1[0].#subform[22].Line4_BeneficiarySupervisePositionTitles[0]"
+        },
+        {
+          "questionKey": "petition.dolAttestationExempt",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1c_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.dolAttestationExempt",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1c_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.dolExemptReason",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1c1_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "$60,000 salary exemption"
+        },
+        {
+          "questionKey": "petition.dolExemptReason",
+          "pdfFieldName": "form1[0].#subform[22].H1BSecALine1c2_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "master's degree exemption"
+        },
+        {
+          "questionKey": "employer.higherEdInstitution",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line1_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.higherEdInstitution",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line1_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.nonprofitAffiliatedHigherEd",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line2_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.nonprofitAffiliatedHigherEd",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line2_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.secondExtensionRequest",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line4_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.secondExtensionRequest",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line4_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.amendedNoExtensionRequest",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line5_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.amendedNoExtensionRequest",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line5_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.correctingUscisError",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line6_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.correctingUscisError",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line6_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.primarySecondaryEdInstitution",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line7_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.primarySecondaryEdInstitution",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line7_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.nonprofitClinicalTraining",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line8_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.nonprofitClinicalTraining",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line8_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "employer.smallEmployerFlag",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line9_Yes[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "employer.smallEmployerFlag",
+          "pdfFieldName": "form1[0].#subform[23].H1BSec2Line9_No[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        },
+        {
+          "questionKey": "petition.capType",
+          "pdfFieldName": "form1[0].#subform[23].Cap[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Bachelor's"
+        },
+        {
+          "questionKey": "petition.capType",
+          "pdfFieldName": "form1[0].#subform[23].Cap[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Master's or higher"
+        },
+        {
+          "questionKey": "petition.capType",
+          "pdfFieldName": "form1[0].#subform[23].Cap[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Chile/Singapore"
+        },
+        {
+          "questionKey": "petition.capType",
+          "pdfFieldName": "form1[0].#subform[23].Cap[3]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Cap Exempt"
+        },
+        {
+          "questionKey": "petition.wageLevel",
+          "pdfFieldName": "form1[0].#subform[23].WageLevelBox[3]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Level I"
+        },
+        {
+          "questionKey": "petition.wageLevel",
+          "pdfFieldName": "form1[0].#subform[23].WageLevelBox[2]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Level II"
+        },
+        {
+          "questionKey": "petition.wageLevel",
+          "pdfFieldName": "form1[0].#subform[23].WageLevelBox[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Level III"
+        },
+        {
+          "questionKey": "petition.wageLevel",
+          "pdfFieldName": "form1[0].#subform[23].WageLevelBox[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Level IV"
+        },
+        {
+          "questionKey": "beneficiary.mastersInstitutionName",
+          "pdfFieldName": "form1[0].#subform[24].H1bSec3Line3a_Name[0]"
+        },
+        {
+          "questionKey": "beneficiary.mastersDegreeAwardedDate",
+          "pdfFieldName": "form1[0].#subform[24].H1bSec3Line3b_DateDegreeAwarded[0]"
+        },
+        {
+          "questionKey": "beneficiary.mastersDegreeType",
+          "pdfFieldName": "form1[0].#subform[24].H1bSec3Line3c_TypeofDegree[0]"
+        },
+        {
+          "questionKey": "beneficiary.mastersInstitutionAddress",
+          "pdfFieldName": "form1[0].#subform[24].H1bSec3Line3d_StreetName[0]"
+        }
       ]
     }
   }

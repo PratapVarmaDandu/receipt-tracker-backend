@@ -390,8 +390,9 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 **Phase 4 — Canonical Question Registry + Form Packet System** (`CanonicalQuestionRegistry`, `DataResolver`):
 
 **JSON config files** (classpath: `immigration/questions/`):
-- `canonical-questions.json` — 44 questions with key, label, sublabel, owner (BENEFICIARY|EMPLOYER|ATTORNEY), dataSource (documentation path), friendlySection, type (TEXT|TEXT_SENSITIVE|DATE|NUMBER|BOOLEAN), required, validation constraints, encrypt flag, formsUsing[]
-- `form-field-mappings/I129.json`, `I485.json`, `I140.json` — per-form section→fields mappings; each field entry: `{ questionKey, pdfFieldName }` where pdfFieldName is the AcroForm field name in the USCIS PDF
+- `canonical-questions.json` — 60 questions with key, label, sublabel, owner (BENEFICIARY|EMPLOYER|ATTORNEY), dataSource (documentation path), friendlySection, type (TEXT|TEXT_SENSITIVE|DATE|NUMBER|BOOLEAN), required, validation constraints, encrypt flag, formsUsing[], storage (typed default | generic), subjectScope (generic only), reviewOnly (attorney review-time answers)
+- `form-field-mappings/I129.json`, `I485.json`, `I140.json` — per-form section→fields mappings; each field entry: `{ questionKey, pdfFieldName, pdfFieldType?, checkboxOnValue?, valueMap? }` where pdfFieldName is the AcroForm field name in the USCIS PDF
+- **Field-type metadata** (per mapping entry, NOT per question — same question can be text on one form, radio on another): `pdfFieldType` = `text` (default) | `checkbox` | `radio`; `checkboxOnValue` = the canonical answer value that checks this box (case-insensitive; lets one Yes/No question map to two checkbox fields; absent → truthy heuristic true/yes/y/1/on/checked); `valueMap` = canonical→export value translation applied before setValue for text/radio (e.g. `{"Male":"M"}`); applied by `PdfFieldApplier` (static utility, `apply(acroForm, entry, value)`); unknown `pdfFieldType` warns at registry load, hard-fails (400) in `FormVersionService.uploadMapping()`
 
 **Model classes** (`immigration/model/question/`): `CanonicalQuestion` (plain POJO, Jackson-deserialised), `FormFieldEntry` (record), `FormSectionMapping` (owner + fields[]), `FormFieldMapping` (formType + sections map), `ResolvedValue` record (value, source, verifiedAt) with factory methods `none()`, `fromProfile()`, `fromOrg()`, `fromCase()`
 
@@ -405,18 +406,57 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 - `sectionLabel(String sectionId)` — static lookup; 10 friendly section IDs → display labels
 
 **`DataResolver` @Service**:
-- `ResolutionContext` record — bundles `CanonicalProfile profile`, `ImmOrg employerOrg`, `ImmOrg lawFirmOrg`, `ImmigrationCase immigrationCase`, `AttorneyProfile attorneyProfile`; any field may be null
+- `ResolutionContext` record — bundles `CanonicalProfile profile`, `ImmOrg employerOrg`, `ImmOrg lawFirmOrg`, `ImmigrationCase immigrationCase`, `AttorneyProfile attorneyProfile`, `Map<String,String> genericAnswers`; any field may be null (a 5-arg `of()` overload passes an empty map)
 - `resolve(CanonicalQuestion, ResolutionContext)` → `ResolvedValue` — dispatches via `switch` on questionKey; never throws (logs WARN, returns `none()`)
 - `resolveAll(List<CanonicalQuestion>, ResolutionContext)` → `Map<String, ResolvedValue>` — one-pass resolution for all questions; keys are questionKey strings
 - Routing logic:
+  - questions with `storage="generic"` → looked up in `ctx.genericAnswers` (plaintext, pre-loaded by the caller); source = `"store"`; unknown typed keys also fall back to this map
   - `beneficiary.*` → `CanonicalProfile` fields; encrypted fields (passportNumber, i94Number, alienNumber, ssn, eadCardNumber) decrypted via `EncryptionService.decrypt()`; I-94 prefers `i94NumberEnc`, falls back to legacy `i94Number` plain column
   - `beneficiary.address*` → parsed from `currentAddressJson` (Map `{line1,city,state,zip,country}`)
-  - `job.*` → first entry of `employmentJson` array for title/startDate; `job.socCode`/`salaryAmount`/`hoursPerWeek` return `none()` (no backing field yet)
+  - `job.*` → first entry of `employmentJson` array for title/startDate; `job.socCode`/`salaryAmount`/`hoursPerWeek` are generic-storage (CASE scope)
   - `employer.*` → `ImmOrg employerOrg` fields
   - `attorney.firmName` / `attorney.email` → `ImmOrg lawFirmOrg` fields; `attorney.barNumber` → first entry of `AttorneyProfile.barNumbersJson[0].barNumber`
 - **No DB calls** in DataResolver — callers load entities before calling resolve()
 
-**Friendly section IDs** (10): `personal_info`, `passport_id`, `current_status`, `company_info`, `job_details`, `employment_history`, `education`, `family_dependents`, `ead_info`, `notification_prefs`
+**Generic answer store** (`CanonicalAnswer`, `CanonicalAnswerService`) — makes new form fields config-only (no entity column / migration / resolver case):
+- Entity: `CanonicalAnswer` → `imm_canonical_answers` (subject_type BENEFICIARY|ORG|CASE, subject_id loose Long, question_key, value_json TEXT, value_hash VARCHAR(64), updated_by_user_id); unique on `(subject_type, subject_id, question_key)`
+- A question opts in via `"storage": "generic"` in canonical-questions.json; optional `"subjectScope"`: `BENEFICIARY | EMPLOYER_ORG | LAW_FIRM_ORG | CASE` (default derived from owner: BENEFICIARY→BENEFICIARY, EMPLOYER→EMPLOYER_ORG, ATTORNEY→LAW_FIRM_ORG); use `CASE` for per-case values (job/LCA details) so they aren't shared across an org's cases
+- `subjectFor(question, immCase)` maps scope → `SubjectRef(subjectType, subjectId)`; `loadForCase(immCase, questions)` → plaintext `Map<questionKey,String>` (one query per distinct subject); `save(ref, question, plaintext, userId)` upserts, encrypting sensitive values (AES-256-GCM + SHA-256 hash, same scheme as `FilingPackageAnswer`)
+- `FilingPackageService.buildContext()` pre-loads the map into `ResolutionContext`; `writeBackAnswers()` persists generic-storage answers for all owners (including ATTORNEY, which has no typed write-back target); write-back only accepts keys present in the questionnaire spec
+- Registry validates `storage`/`subjectScope` values at startup (WARN on typos)
+- Typed columns remain for fields that drive business logic (dates → reminders, status, receipt numbers); everything else new should be `storage="generic"`
+
+**Derived fields** (`DerivationRegistry`) — questions computed from case data, never collected:
+- A question opts in via `"derivation": "<name>"` in canonical-questions.json; `CanonicalQuestion.isDerived()`
+- `DerivationRegistry` @Service: named functions `ResolutionContext → String` (context-only, no DB calls); implemented: `classificationSymbol` (CaseType → "H-1B"/"H-4"), `basisForClassification` (H1B_INITIAL→"new employment", H1B_EXTENSION→"continuation", H1B_TRANSFER→"change of employer", H1B_AMENDMENT→"amended petition"), `requestedAction` (H1B_INITIAL→"notify office", H1B_EXTENSION→"extend", H1B_TRANSFER→"change status"), `totalWorkers` (always "1"); unknown case types return null → `ResolvedValue.none()`
+- `DataResolver.resolve()` short-circuits derived questions to the registry; new `ResolvedValue.fromDerived()` source = `"derived"`
+- Derived questions are excluded from questionnaire specs (`FilingPackageService.create()`) and from write-back (defensive filter in `writeBackAnswers()`), but DO get `FilingPackageAnswer` prefill rows (source="derived"); attorney override still works on them
+- Registry warns at startup if a question names an unknown derivation
+- 4 derived questions in canonical-questions.json: `petition.classificationSymbol`, `petition.basisForClassification`, `petition.requestedAction`, `petition.totalWorkers` (owner ATTORNEY, formsUsing I129, section `petition_info`)
+
+**Review-only questions** (Phase 5) — attorney review-time answers (attestations/signatory fields):
+- A question opts in via `"reviewOnly": true` in canonical-questions.json; `CanonicalQuestion.isReviewOnly()`
+- Excluded from ALL questionnaire specs (`FilingPackageService.create()`) and from prefill resolution (`DataResolver.resolve()` short-circuits to `none()` — attestations are per-package, never carried over from profile/org/generic store)
+- The attorney sets them via the existing `PUT …/packages/{packageId}/answers/{answerKey}` override endpoint; source stays `attorney_override`
+- Review summary groups them under `"ATTORNEY_REVIEW"` (instead of owner) and excludes them from overall + per-owner completeness %, `missingRequired`, and `FilingPackageDTO.completenessPercent`
+- Pre-generation check 4 (`ImmPdfGenerationService`) counts required reviewOnly questions — PDF generation blocks until the attorney answers them
+- Defensive `writeBackAnswers()` filter skips reviewOnly keys (same pattern as derived)
+- 10 reviewOnly questions in canonical-questions.json, all owner ATTORNEY, formsUsing I129: 6 BOOLEAN Part 4 processing questions (`petition.replacementI94Requested`, `petition.beneficiaryHasValidPassport`, `petition.priorPetitionsFiledForBeneficiary`, `petition.dependentsFilingWithPetition`, `petition.beneficiaryInRemovalProceedings`, `petition.priorClassificationGranted`), 1 BOOLEAN Part 6 EAR/ITAR (`petition.exportControlLicenseRequired` — maps to two mutually exclusive checkboxes via `checkboxOnValue` later), 3 Part 7 signatory fields (`signatory.fullName`, `signatory.title` TEXT, `signatory.signatureDate` DATE)
+- Registry warns if a question is both derived and reviewOnly (reviewOnly wins — derivation never evaluated)
+- Tests: `ReviewOnlyQuestionTest` (5 tests)
+
+**Repeat groups — LIST questions** (Phase 4) — answer is a JSON array string of flat row objects:
+- A question opts in via `"type": "LIST"` + `"repeatGroup": { sourceList?, maxRows, itemFields[] }` (`RepeatGroupSpec`/`RepeatItemField` POJOs); LIST questions must be `storage: "generic"` — registry WARNs otherwise; itemField types: TEXT|DATE|NUMBER|SELECT
+- `sourceList` (optional) names a CanonicalProfile JSON-array column (`passportsJson|travelEntriesJson|dependentsJson|priorVisasJson|educationJson|employmentJson` — `DataResolver.KNOWN_SOURCE_LISTS`) used for **prefill only**: `DataResolver.resolveList()` projects declared itemFields out of it (drops `id`/`numberEnc`/`documentIds`); a generic-store value (latest submitted, non-empty array) takes precedence; write-back always goes to the generic store — profile JSON columns are never patched (no-partial-JSON rule unchanged)
+- Mapping side: `FormFieldEntry.repeatIndex` (0-based) + `itemField` bind one PDF field to row N / column X; existing `pdfFieldType`/`checkboxOnValue`/`valueMap` apply to the extracted cell. Validated by `CanonicalQuestionRegistry.repeatEntryProblem()` — WARN at registry load, hard 400 in `uploadMapping()`: both set together, question must be LIST, itemField declared, `repeatIndex < maxRows`, and a LIST question mapped without repeatIndex is rejected. Builder `saveMapping()` rejects LIST keys (JSON upload only); `flattenMapping()` skips repeat entries
+- Submit/override: `FilingPackageService.sanitizeListAnswer()` — 400 if not a JSON array of objects; strips undeclared keys; drops blank rows; truncates to `maxRows` with WARN (USCIS overflow sheets out of scope); null when nothing survives
+- Public DTO: `QuestionnaireQuestion` gains `maxRows` + `itemFields[]`; LIST prefillValue = the JSON array string (sensitive-null rule unchanged); frontend renders add/remove rows and submits `JSON.stringify(rows)` — payload stays `Record<string,string>`
+- PDF fill: `ImmPdfGenerationService.extractListCell()` parses the array once per questionKey (cache), one-time overflow WARN; missing row/field → field left unfilled (`filled=false`, not an error); audit entries include `repeatIndex`/`itemField`
+- Encrypted LIST questions work transparently (whole-array ciphertext in valueJson, null prefill, decrypt-then-index at fill); no per-item-field encryption — keep passports out of LIST questionnaires
+- 3 LIST questions in canonical-questions.json: `beneficiary.aliases` (maxRows 2, no sourceList), `beneficiary.priorStays` (sourceList priorVisasJson), `beneficiary.dependents` (sourceList dependentsJson); I129.json maps aliases row 0 → `Pt3Line2a/b/c_*` (field names unverified like the rest of I129.json)
+- Tests: `RepeatGroupTest` (22 tests) covers registry validation, resolveList precedence/projection, sanitizeListAnswer, extractListCell
+
+**Friendly section IDs** (11): `personal_info`, `passport_id`, `current_status`, `company_info`, `job_details`, `employment_history`, `education`, `family_dependents`, `ead_info`, `notification_prefs`, `petition_info`
 
 **Filing Package System** (`FilingPackageService`, `FilingPackageController`):
 - **Entities**: `FilingPackage` → `imm_filing_packages` (caseId loose Long, name, selectedFormTypesJson TEXT, status DRAFT|QUESTIONNAIRES_SENT|ANSWERS_COLLECTED|ATTORNEY_REVIEW|APPROVED|GENERATED|FILED, approvedByUserId, approvedAt, generatedPdfPacketKey, createdByUserId); `FilingPackageQuestionnaire` → `imm_filing_package_questionnaires` (FilingPackage FK, targetRelationship BENEFICIARY|EMPLOYER|ATTORNEY, token UUID unique, questionnaireSpecJson TEXT = JSON array of question keys, status PENDING|SUBMITTED|EXPIRED, submittedAt, submittedByUserId loose Long, submittedAnswersJson TEXT, expiresAt); `FilingPackageAnswer` → `imm_filing_package_answers` (FilingPackage FK, questionKey, valueJson TEXT, valueHash VARCHAR(64) SHA-256 of plaintext, owner, source profile|org|questionnaire|attorney_override, verifiedAt, answeredByUserId, attorneyOverrideReason TEXT); unique constraint on (package_id, question_key)
@@ -444,7 +484,7 @@ Sub-packages: `model`, `repository`, `service`, `controller`, `dto`
 **PDF Generation Service** (`ImmPdfGenerationService`, endpoints on `FilingPackageController`):
 - **Entity**: `GeneratedPdfPacket` → `imm_generated_pdf_packets` (packageId loose Long, caseId loose Long, formVersionsUsedJson TEXT = `[{formType, versionId, editionDate}]`, generatedAt, generatedByUserId loose Long, status DRAFT|ATTORNEY_APPROVED|FILED, attorneyApprovedAt, attorneyApprovedBy loose Long, pdfStorageKey VARCHAR(500) relative from storageRoot e.g. `pdf-packets/{caseId}/{uuid}.zip`, generationAuditJson TEXT = `[{questionKey, pdfField, source, versionId, filled, formType}]`)
 - **Pre-generation checks** (all must pass): 1) package status=APPROVED; 2) each formType has an APPROVED FormVersion with fieldMappingVerified=true; 3) no newer PENDING_REVIEW version (409 CONFLICT with `PENDING_REVIEW_EXISTS:` prefix if any — frontend shows override prompt); 4) all required FilingPackageAnswer rows present and non-blank; 5) all required ChecklistItem rows are UPLOADED or WAIVED
-- **PDF fill loop**: loads PDF from `storageRoot/{formVersion.pdfStorageKey}` via `Loader.loadPDF(bytes)` (PDFBox 3.x); for each field entry in `form-field-mappings/{formType}.json`, resolves FilingPackageAnswer; decrypts if `CanonicalQuestion.isEncrypt()`; calls `PDField.setValue()`; clears plaintext from memory immediately; calls `acroForm.flatten()` after all fills; audit entry captured per field
+- **PDF fill loop**: loads PDF from `storageRoot/{formVersion.pdfStorageKey}` via `Loader.loadPDF(bytes)` (PDFBox 3.x); for each field entry in `form-field-mappings/{formType}.json`, resolves FilingPackageAnswer; decrypts if `CanonicalQuestion.isEncrypt()`; fills via `PdfFieldApplier.apply()` (type-aware: text/checkbox/radio + valueMap; checkbox uses `PDCheckBox.check()/unCheck()` so the PDF's own on-value is used); clears plaintext from memory immediately; calls `acroForm.flatten()` after all fills; audit entry captured per field (includes `pdfFieldType`)
 - **Cover sheet**: PDFBox `PDDocument` + `PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD/HELVETICA)`; contains case number, date, generated-by name, forms+editions table, attorney signature line
 - **ZIP**: `java.util.zip.ZipOutputStream`; entries: `00_cover-sheet.pdf`, `01_{formType}_{edition}.pdf`, …; stored at `storageRoot/pdf-packets/{caseId}/{uuid}.zip`
 - **approve()**: APPROVE_FORMS scope; idempotent; sets status→ATTORNEY_APPROVED; writes `FormVersionAuditEvent` action=PACKET_APPROVED per form

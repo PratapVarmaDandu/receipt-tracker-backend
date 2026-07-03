@@ -6,6 +6,7 @@ import com.receipttracker.immigration.model.question.CanonicalQuestion;
 import com.receipttracker.immigration.model.question.FormFieldEntry;
 import com.receipttracker.immigration.model.question.FormFieldMapping;
 import com.receipttracker.immigration.model.question.FormSectionMapping;
+import com.receipttracker.immigration.model.question.RepeatGroupSpec;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ public class CanonicalQuestionRegistry {
     private static final String MAPPINGS_PATTERN  = "classpath:immigration/questions/form-field-mappings/*.json";
 
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private DerivationRegistry derivationRegistry;
 
     /** All questions indexed by key for O(1) lookup */
     private Map<String, CanonicalQuestion> byKey = Collections.emptyMap();
@@ -65,7 +67,137 @@ public class CanonicalQuestionRegistry {
             List<CanonicalQuestion> list = objectMapper.readValue(is, new TypeReference<>() {});
             allQuestions = Collections.unmodifiableList(list);
             byKey = list.stream().collect(Collectors.toUnmodifiableMap(CanonicalQuestion::getKey, q -> q));
-            log.info("Loaded {} canonical questions", list.size());
+            validateStorageConfig(list);
+            validateDerivations(list);
+            validateRepeatGroups(list);
+            log.info("Loaded {} canonical questions ({} generic-storage, {} derived, {} review-only)",
+                     list.size(),
+                     list.stream().filter(CanonicalQuestion::isGenericStorage).count(),
+                     list.stream().filter(CanonicalQuestion::isDerived).count(),
+                     list.stream().filter(CanonicalQuestion::isReviewOnly).count());
+        }
+    }
+
+    /** Warns on unknown pdfFieldType values in bundled mappings — an unknown type fills as text. */
+    private void validateFieldTypes(FormFieldMapping ffm) {
+        if (ffm.getSections() == null) return;
+        for (FormSectionMapping section : ffm.getSections().values()) {
+            if (section.getFields() == null) continue;
+            for (FormFieldEntry entry : section.getFields()) {
+                if (entry.getPdfFieldType() != null
+                        && !PdfFieldApplier.VALID_FIELD_TYPES.contains(entry.getPdfFieldType())) {
+                    log.warn("Form mapping {}: field '{}' has unknown pdfFieldType '{}' — expected one of {}",
+                             ffm.getFormType(), entry.getPdfFieldName(), entry.getPdfFieldType(),
+                             PdfFieldApplier.VALID_FIELD_TYPES);
+                }
+                String problem = repeatEntryProblem(entry);
+                if (problem != null) {
+                    log.warn("Form mapping {}: field '{}' — {}",
+                             ffm.getFormType(), entry.getPdfFieldName(), problem);
+                }
+            }
+        }
+    }
+
+    /**
+     * Validates a mapping entry's repeat-group binding against the loaded
+     * questions. Returns a description of the problem, or null when valid.
+     * Shared with FormVersionService.uploadMapping(), which hard-fails on it.
+     */
+    public String repeatEntryProblem(FormFieldEntry entry) {
+        CanonicalQuestion cq = entry.getQuestionKey() != null
+                ? byKey.get(entry.getQuestionKey()) : null;
+        boolean isListQuestion = cq != null && cq.isList();
+
+        if (!entry.isRepeatEntry() && entry.getItemField() == null) {
+            // Plain scalar entry — but a LIST question can't fill one field whole
+            return isListQuestion
+                    ? "questionKey '" + entry.getQuestionKey()
+                      + "' is a LIST question and needs repeatIndex + itemField"
+                    : null;
+        }
+        if (entry.getRepeatIndex() == null || entry.getItemField() == null || entry.getItemField().isBlank()) {
+            return "repeatIndex and itemField must be set together";
+        }
+        if (cq == null) return null; // unknown key is reported separately
+        if (!isListQuestion) {
+            return "repeatIndex/itemField set but questionKey '" + entry.getQuestionKey()
+                   + "' is not a LIST question";
+        }
+        RepeatGroupSpec spec = cq.getRepeatGroup();
+        if (spec == null) return null; // missing repeatGroup warned at question load
+        if (entry.getRepeatIndex() < 0 || entry.getRepeatIndex() >= spec.effectiveMaxRows()) {
+            return "repeatIndex " + entry.getRepeatIndex() + " out of range (maxRows "
+                   + spec.effectiveMaxRows() + ")";
+        }
+        boolean known = spec.getItemFields() != null && spec.getItemFields().stream()
+                .anyMatch(f -> entry.getItemField().equals(f.getKey()));
+        if (!known) {
+            return "itemField '" + entry.getItemField() + "' is not declared on '"
+                   + entry.getQuestionKey() + "'";
+        }
+        return null;
+    }
+
+    /** Warns on malformed repeat-group config — such questions degrade to no prefill/fill. */
+    private void validateRepeatGroups(List<CanonicalQuestion> list) {
+        for (CanonicalQuestion q : list) {
+            RepeatGroupSpec rg = q.getRepeatGroup();
+            if (q.isList() && rg == null) {
+                log.warn("Question '{}' is type LIST but has no repeatGroup block", q.getKey());
+                continue;
+            }
+            if (!q.isList() && rg != null) {
+                log.warn("Question '{}' has a repeatGroup but type '{}' (expected LIST)", q.getKey(), q.getType());
+            }
+            if (rg == null) continue;
+            if (q.isList() && !q.isGenericStorage()) {
+                log.warn("Question '{}' is LIST but storage '{}' — LIST questions must use storage=\"generic\"",
+                         q.getKey(), q.getStorage());
+            }
+            if (rg.getItemFields() == null || rg.getItemFields().isEmpty()) {
+                log.warn("Question '{}' repeatGroup has no itemFields", q.getKey());
+            }
+            if (rg.getMaxRows() <= 0) {
+                log.warn("Question '{}' repeatGroup has maxRows {} — using default {}",
+                         q.getKey(), rg.getMaxRows(), RepeatGroupSpec.DEFAULT_MAX_ROWS);
+            }
+            if (rg.getSourceList() != null && !DataResolver.KNOWN_SOURCE_LISTS.contains(rg.getSourceList())) {
+                log.warn("Question '{}' repeatGroup names unknown sourceList '{}' — expected one of {}",
+                         q.getKey(), rg.getSourceList(), DataResolver.KNOWN_SOURCE_LISTS);
+            }
+        }
+    }
+
+    private static final Set<String> VALID_STORAGE = Set.of("typed", "generic");
+    private static final Set<String> VALID_SUBJECT_SCOPES =
+            Set.of("BENEFICIARY", "EMPLOYER_ORG", "LAW_FIRM_ORG", "CASE");
+
+    /** Warns loudly on config typos — a bad storage value silently degrades to typed. */
+    private void validateStorageConfig(List<CanonicalQuestion> list) {
+        for (CanonicalQuestion q : list) {
+            if (q.getStorage() != null && !VALID_STORAGE.contains(q.getStorage())) {
+                log.warn("Question '{}' has unknown storage '{}' — expected one of {}",
+                         q.getKey(), q.getStorage(), VALID_STORAGE);
+            }
+            if (q.getSubjectScope() != null && !VALID_SUBJECT_SCOPES.contains(q.getSubjectScope())) {
+                log.warn("Question '{}' has unknown subjectScope '{}' — expected one of {}",
+                         q.getKey(), q.getSubjectScope(), VALID_SUBJECT_SCOPES);
+            }
+        }
+    }
+
+    /** Warns on unknown derivation names — such questions resolve to no value. */
+    private void validateDerivations(List<CanonicalQuestion> list) {
+        for (CanonicalQuestion q : list) {
+            if (q.isDerived() && !derivationRegistry.knows(q.getDerivation())) {
+                log.warn("Question '{}' names unknown derivation '{}' — expected one of {}",
+                         q.getKey(), q.getDerivation(), derivationRegistry.names());
+            }
+            if (q.isDerived() && q.isReviewOnly()) {
+                log.warn("Question '{}' is both derived and reviewOnly — reviewOnly wins: "
+                         + "the derivation is never evaluated", q.getKey());
+            }
         }
     }
 
@@ -77,6 +209,7 @@ public class CanonicalQuestionRegistry {
             try (InputStream is = res.getInputStream()) {
                 FormFieldMapping ffm = objectMapper.readValue(is, FormFieldMapping.class);
                 if (ffm.getFormType() != null) {
+                    validateFieldTypes(ffm);
                     map.put(ffm.getFormType(), ffm);
                     log.debug("Loaded form mapping for {}", ffm.getFormType());
                 }
@@ -118,6 +251,27 @@ public class CanonicalQuestionRegistry {
                         Collectors.toList()
                 )
         );
+    }
+
+    /**
+     * Builds the per-owner questionnaire spec (owner -> ordered question keys) for a
+     * resolved question set: {@link #getQuestionsByOwner} minus derived (computed, never
+     * asked) and reviewOnly (attorney attestation, set via override) questions. This is
+     * the exact "nothing else, nothing less" scoping contract — an owner's questionnaire
+     * must contain precisely the non-derived, non-reviewOnly questions they own among the
+     * questions returned by {@link #getQuestionsForForms}. Omits owners left with no keys.
+     */
+    public Map<String, List<String>> getQuestionnaireSpecByOwner(List<CanonicalQuestion> questions) {
+        Map<String, List<CanonicalQuestion>> byOwner = getQuestionsByOwner(questions);
+        Map<String, List<String>> spec = new LinkedHashMap<>();
+        for (Map.Entry<String, List<CanonicalQuestion>> entry : byOwner.entrySet()) {
+            List<String> keys = entry.getValue().stream()
+                    .filter(cq -> !cq.isDerived() && !cq.isReviewOnly())
+                    .map(CanonicalQuestion::getKey)
+                    .toList();
+            if (!keys.isEmpty()) spec.put(entry.getKey(), keys);
+        }
+        return spec;
     }
 
     /**
@@ -173,16 +327,17 @@ public class CanonicalQuestionRegistry {
         return SECTION_LABELS.getOrDefault(sectionId, sectionId);
     }
 
-    private static final Map<String, String> SECTION_LABELS = Map.of(
-        "personal_info",       "Personal Information",
-        "passport_id",         "Passport & I-94",
-        "current_status",      "Current Immigration Status",
-        "company_info",        "Company Information",
-        "job_details",         "Job & Position Details",
-        "employment_history",  "Employment History",
-        "education",           "Education Background",
-        "family_dependents",   "Family & Dependents",
-        "ead_info",            "Work Authorization (EAD)",
-        "notification_prefs",  "Notification Preferences"
+    private static final Map<String, String> SECTION_LABELS = Map.ofEntries(
+        Map.entry("personal_info",       "Personal Information"),
+        Map.entry("passport_id",         "Passport & I-94"),
+        Map.entry("current_status",      "Current Immigration Status"),
+        Map.entry("company_info",        "Company Information"),
+        Map.entry("job_details",         "Job & Position Details"),
+        Map.entry("employment_history",  "Employment History"),
+        Map.entry("education",           "Education Background"),
+        Map.entry("family_dependents",   "Family & Dependents"),
+        Map.entry("ead_info",            "Work Authorization (EAD)"),
+        Map.entry("notification_prefs",  "Notification Preferences"),
+        Map.entry("petition_info",       "Petition Information")
     );
 }

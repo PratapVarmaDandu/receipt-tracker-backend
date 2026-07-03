@@ -1,0 +1,302 @@
+{
+  "formType": "I131",
+  "sections": {
+    "part1_application_type": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "petition.i131ApplicationType",
+          "pdfFieldName": "form1[0].P1[0].CB_AppType[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Reentry Permit"
+        },
+        {
+          "questionKey": "petition.i131ApplicationType",
+          "pdfFieldName": "form1[0].P1[0].CB_AppType[4]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Advance Parole"
+        },
+        {
+          "questionKey": "petition.i485ReceiptNumberForAp",
+          "pdfFieldName": "form1[0].P1[0].P1_Line5A[0]"
+        }
+      ]
+    },
+    "part2_applicant": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.lastName",
+          "pdfFieldName": "form1[0].P4[0].Part2_Line1_FamilyName[0]"
+        },
+        {
+          "questionKey": "beneficiary.firstName",
+          "pdfFieldName": "form1[0].P4[0].Part2_Line1_GivenName[0]"
+        },
+        {
+          "questionKey": "beneficiary.middleName",
+          "pdfFieldName": "form1[0].P4[0].Part2_Line1_MiddleName[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 0,
+          "itemField": "lastName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_FamilyName1[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 0,
+          "itemField": "firstName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_GivenName1[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 0,
+          "itemField": "middleName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_MiddleName1[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 1,
+          "itemField": "lastName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_FamilyName2[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 1,
+          "itemField": "firstName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_GivenName2[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 1,
+          "itemField": "middleName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_MiddleName2[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 2,
+          "itemField": "lastName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_FamilyName3[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 2,
+          "itemField": "firstName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_GivenName3[0]"
+        },
+        {
+          "questionKey": "beneficiary.aliases",
+          "repeatIndex": 2,
+          "itemField": "middleName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line2_MiddleName3[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingInCareOfName",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line3_InCareofName[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressLine1",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line3_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressCity",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line3_CityTown[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressState",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line3_State[0]"
+        },
+        {
+          "questionKey": "beneficiary.mailingAddressZip",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line3_ZipCode[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressLine1",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line4_StreetNumberName[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressCity",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line4_CityTown[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressState",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line4_State[0]"
+        },
+        {
+          "questionKey": "beneficiary.addressZip",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line4_ZipCode[0]"
+        },
+        {
+          "questionKey": "beneficiary.alienNumber",
+          "pdfFieldName": "form1[0].P5[0].#area[0].Part2_Line5_AlienNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.countryOfBirth",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line6_CountryOfBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.citizenshipCountry",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line7_CountryOfCitizenshiporNationality[0]"
+        },
+        {
+          "questionKey": "beneficiary.gender",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line8_Gender[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Male"
+        },
+        {
+          "questionKey": "beneficiary.gender",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line8_Gender[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Female"
+        },
+        {
+          "questionKey": "beneficiary.dateOfBirth",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line9_DateOfBirth[0]"
+        },
+        {
+          "questionKey": "beneficiary.ssn",
+          "pdfFieldName": "form1[0].P5[0].#area[1].Part2_Line10_SSN[0]"
+        },
+        {
+          "questionKey": "beneficiary.uscisAccountNumber",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line11_USCISOnlineAcctNumber[0]"
+        },
+        {
+          "questionKey": "beneficiary.classOfAdmission",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line12_ClassofAdmission[0]"
+        },
+        {
+          "questionKey": "beneficiary.i94Number",
+          "pdfFieldName": "form1[0].P5[0].Part2_Line13_I94RecordNo[0]"
+        },
+        {
+          "questionKey": "beneficiary.currentVisaExpiry",
+          "pdfFieldName": "form1[0].P6[0].Part2_Line14_I94ExpDate[0]"
+        }
+      ]
+    },
+    "part4_processing": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "petition.beneficiaryInRemovalProceedings",
+          "pdfFieldName": "form1[0].P7[0].P4_Line1_YesNo[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "true"
+        },
+        {
+          "questionKey": "petition.beneficiaryInRemovalProceedings",
+          "pdfFieldName": "form1[0].P7[0].P4_Line1_YesNo[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "false"
+        }
+      ]
+    },
+    "part5_reentry_permit": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.timeAbroadSincePermanentResidence",
+          "pdfFieldName": "form1[0].#subform[8].P5_Line1_Lessthan6[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "Less Than 6 Months"
+        },
+        {
+          "questionKey": "beneficiary.timeAbroadSincePermanentResidence",
+          "pdfFieldName": "form1[0].#subform[8].P5_Line1_6months[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "6 Months to 1 Year"
+        },
+        {
+          "questionKey": "beneficiary.timeAbroadSincePermanentResidence",
+          "pdfFieldName": "form1[0].#subform[8].P5_Line1_1to2[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "1 to 2 Years"
+        },
+        {
+          "questionKey": "beneficiary.timeAbroadSincePermanentResidence",
+          "pdfFieldName": "form1[0].#subform[8].P5_Line1_2to3[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "2 to 3 Years"
+        },
+        {
+          "questionKey": "beneficiary.timeAbroadSincePermanentResidence",
+          "pdfFieldName": "form1[0].#subform[8].P5_Line1_3to4[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "3 to 4 Years"
+        },
+        {
+          "questionKey": "beneficiary.timeAbroadSincePermanentResidence",
+          "pdfFieldName": "form1[0].#subform[8].P5_Line1_morethan[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "More Than 4 Years"
+        }
+      ]
+    },
+    "part7_travel": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.intendedDepartureDate",
+          "pdfFieldName": "form1[0].#subform[9].P7_Line1_DateOfDeparture[0]"
+        },
+        {
+          "questionKey": "beneficiary.tripPurpose",
+          "pdfFieldName": "form1[0].#subform[9].P7_Line2_Purpose[0]"
+        },
+        {
+          "questionKey": "beneficiary.tripCountries",
+          "pdfFieldName": "form1[0].#subform[9].P7_Line3_ListCountries[0]"
+        },
+        {
+          "questionKey": "beneficiary.numberOfTrips",
+          "pdfFieldName": "form1[0].#subform[9].P7_Line4_CB[0]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "One Trip"
+        },
+        {
+          "questionKey": "beneficiary.numberOfTrips",
+          "pdfFieldName": "form1[0].#subform[9].P7_Line4_CB[1]",
+          "pdfFieldType": "checkbox",
+          "checkboxOnValue": "More than one trip"
+        },
+        {
+          "questionKey": "beneficiary.tripLengthDays",
+          "pdfFieldName": "form1[0].#subform[9].P7_Line5_ExpectedLengthTrip[0]"
+        }
+      ]
+    },
+    "part10_contact_signature": {
+      "owner": "BENEFICIARY",
+      "fields": [
+        {
+          "questionKey": "beneficiary.phone",
+          "pdfFieldName": "form1[0].#subform[10].Part10_Line1_DayPhone[0]"
+        },
+        {
+          "questionKey": "beneficiary.email",
+          "pdfFieldName": "form1[0].#subform[10].Part10_Line3_Email[0]"
+        },
+        {
+          "questionKey": "beneficiary.applicationSignatureDate",
+          "pdfFieldName": "form1[0].#subform[10].Part10_Line4_DateofSignature[0]"
+        }
+      ]
+    },
+    "part12_preparer": {
+      "owner": "ATTORNEY",
+      "fields": [
+        {
+          "questionKey": "attorney.firmName",
+          "pdfFieldName": "form1[0].#subform[12].Part12_Line2_NameofBusinessorOrgName[0]"
+        },
+        {
+          "questionKey": "attorney.email",
+          "pdfFieldName": "form1[0].#subform[12].Part12_Line5_Email[0]"
+        }
+      ]
+    }
+  }
+}
