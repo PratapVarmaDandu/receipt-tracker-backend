@@ -8,9 +8,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
@@ -57,6 +61,12 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         } else {
             log.info("{} user: {} ({})", isNew ? "Created" : "Returning", name, email);
         }
-        return oAuth2User;
+
+        // Flag brand-new accounts so OAuth2SuccessHandler can stash a one-shot session
+        // marker for the referral-claim flow (see NewSignupFlag). Stub-user merges don't
+        // count as new signups — that account already existed via an invite flow.
+        Map<String, Object> attributes = new HashMap<>(oAuth2User.getAttributes());
+        attributes.put("isNewSignup", isNew);
+        return new DefaultOAuth2User(oAuth2User.getAuthorities(), attributes, "sub");
     }
 }

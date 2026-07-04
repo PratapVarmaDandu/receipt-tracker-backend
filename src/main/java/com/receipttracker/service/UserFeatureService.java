@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -36,6 +37,41 @@ public class UserFeatureService {
         grant.setExpiresAt(null); // perpetual grant
         userFeatureRepo.save(grant);
         log.info("UserFeatureService: granted {} to user {}", feature, userId);
+    }
+
+    /**
+     * Extends (or creates) a bonus grant for {feature} by {months}, stacking on top of
+     * whatever non-expired expiry already exists (12 -> 13, 13 -> 14). A no-op if the
+     * user already has a perpetual grant for this feature (active paid subscription --
+     * grantFeature() never sets a finite expiresAt, so there's nothing to extend and
+     * creating a finite one here would shorten their access, not add to it). Returns
+     * the resulting expiresAt, or null if skipped because the grant is perpetual.
+     */
+    @Transactional
+    public LocalDateTime grantBonusMonths(Long userId, AppFeature feature, int months, String reason) {
+        User user = requireUser(userId);
+        UserFeatureGrant grant = userFeatureRepo.findByUserAndFeature(user, feature)
+                .orElseGet(() -> {
+                    UserFeatureGrant g = new UserFeatureGrant();
+                    g.setUser(user);
+                    g.setFeature(feature);
+                    return g;
+                });
+
+        boolean alreadyPerpetual = grant.getId() != null && grant.getExpiresAt() == null;
+        if (alreadyPerpetual) {
+            log.info("UserFeatureService: bonus skipped for user {} feature {} — already perpetual (reason={})",
+                    userId, feature, reason);
+            return null;
+        }
+
+        LocalDateTime base = (grant.getExpiresAt() != null && grant.getExpiresAt().isAfter(LocalDateTime.now()))
+                ? grant.getExpiresAt() : LocalDateTime.now();
+        grant.setExpiresAt(base.plusMonths(months));
+        userFeatureRepo.save(grant);
+        log.info("UserFeatureService: granted {} bonus month(s) of {} to user {} (reason={}), new expiry={}",
+                months, feature, userId, reason, grant.getExpiresAt());
+        return grant.getExpiresAt();
     }
 
     @Transactional

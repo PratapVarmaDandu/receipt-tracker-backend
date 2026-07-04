@@ -65,6 +65,10 @@ public class User {
     @Column(name = "platform_admin")
     private Boolean platformAdmin = false;
 
+    /** Short shareable referral code; lazily generated on first visit to the referrals page. */
+    @Column(name = "referral_code", unique = true)
+    private String referralCode;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

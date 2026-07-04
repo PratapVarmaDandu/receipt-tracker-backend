@@ -50,4 +50,29 @@ public class SubscriptionController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    /** Current user's local subscription rows — status/renewal/grace-deadline for the past-due banner. */
+    @GetMapping("/mine")
+    public ResponseEntity<?> getMine() {
+        try {
+            return ResponseEntity.ok(subscriptionService.getMySubscriptions());
+        } catch (Exception e) {
+            log.warn("!!! getMine failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** User-initiated cancellation — schedules cancellation at Square for the end of the current billing period. */
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancel(@PathVariable Long id) {
+        try {
+            log.info(">>> cancelSubscription id={}", id);
+            var dto = subscriptionService.cancelSubscription(id);
+            log.info("<<< cancelSubscription id={}", id);
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            log.warn("!!! cancelSubscription failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

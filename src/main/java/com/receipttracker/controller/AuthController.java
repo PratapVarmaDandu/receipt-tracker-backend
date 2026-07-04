@@ -2,6 +2,9 @@ package com.receipttracker.controller;
 
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
+import com.receipttracker.security.NewSignupFlag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,10 +26,10 @@ public class AuthController {
     private UserRepository userRepository;
 
     @GetMapping("/me")
-    public ResponseEntity<?> me(Authentication authentication) {
+    public ResponseEntity<?> me(Authentication authentication, HttpServletRequest request) {
         log.trace(">>> GET /api/auth/me");
         long startTime = System.currentTimeMillis();
-        
+
         if (authentication == null || !authentication.isAuthenticated()
                 || authentication instanceof AnonymousAuthenticationToken) {
             long duration = System.currentTimeMillis() - startTime;
@@ -38,6 +41,12 @@ public class AuthController {
             OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
             String googleId = oAuth2User.getAttribute("sub");
             log.debug("GET /api/auth/me - Checking user: googleId={}", googleId);
+
+            // Read-only: this flag is consumed (cleared) by POST /api/referrals/claim,
+            // not here, so repeated /me calls (page refreshes) keep reporting it until
+            // the frontend actually attempts a claim.
+            HttpSession session = request.getSession(false);
+            boolean isNewSignup = session != null && Boolean.TRUE.equals(session.getAttribute(NewSignupFlag.SESSION_KEY));
 
             ResponseEntity<?> result = userRepository.findByGoogleId(googleId)
                 .map(user -> {
@@ -52,7 +61,8 @@ public class AuthController {
                         "picture",           user.getPicture() != null ? user.getPicture() : "",
                         "welcomeDismissed",  user.isWelcomeDismissed(),
                         "storageConfigured", user.isStorageConfigured(),
-                        "platformAdmin",     Boolean.TRUE.equals(user.getPlatformAdmin())
+                        "platformAdmin",     Boolean.TRUE.equals(user.getPlatformAdmin()),
+                        "isNewUser",         isNewSignup
                     ));
                 })
                 .orElse(ResponseEntity.ok(Map.of("authenticated", false)));

@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -227,19 +228,65 @@ public class EmailService {
         send(to, subject, html);
     }
 
+    /**
+     * Feedback / bug report / idea submission notification to the platform owner.
+     * Supports an optional attachment (screenshot, document, etc.) and embeds the
+     * auto-captured client diagnostic log (if any) as plain text in the body.
+     */
+    public void sendSubmissionNotification(String ownerEmail, String submitterName, String submitterEmail,
+                                            String type, String message, String clientLogJson,
+                                            byte[] attachmentBytes, String attachmentFilename, String attachmentMimeType) {
+        String typeLabel = switch (type) {
+            case "BUG_REPORT" -> "Bug Report";
+            case "IDEA" -> "Idea";
+            default -> "Feedback";
+        };
+        String name = submitterName != null && !submitterName.isBlank() ? submitterName : submitterEmail;
+        String subject = "New " + typeLabel + " from " + name;
+        String body = "<div style='font-family:sans-serif;max-width:560px;margin:auto'>"
+            + "<div style='background:#4f46e5;padding:24px 28px;border-radius:10px 10px 0 0'>"
+            + "<h2 style='color:#fff;margin:0;font-size:1.3rem'>New " + escapeHtml(typeLabel) + " Submission</h2>"
+            + "</div>"
+            + "<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;"
+            + "padding:24px 28px;border-radius:0 0 10px 10px'>"
+            + "<p><strong>" + escapeHtml(name) + "</strong> (" + escapeHtml(submitterEmail) + ")</p>"
+            + "<blockquote style='border-left:4px solid #4f46e5;margin:16px 0;padding:8px 16px;"
+            + "background:#f8f9ff;border-radius:0 6px 6px 0;color:#374151;white-space:pre-wrap'>"
+            + escapeHtml(message) + "</blockquote>"
+            + (attachmentBytes != null
+                ? "<p style='color:#64748b'>Attachment: " + escapeHtml(attachmentFilename) + "</p>"
+                : "")
+            + (clientLogJson != null && !clientLogJson.isBlank()
+                ? "<p style='color:#64748b;font-size:13px;margin-top:20px'>Diagnostic log:</p>"
+                + "<pre style='background:#f1f5f9;padding:12px;border-radius:6px;font-size:11px;"
+                + "overflow-x:auto;white-space:pre-wrap'>" + escapeHtml(clientLogJson) + "</pre>"
+                : "")
+            + "</div></div>";
+        sendWithAttachment(ownerEmail, subject, body, attachmentBytes, attachmentFilename, attachmentMimeType);
+    }
+
     private void send(String to, String subject, String htmlBody) {
+        sendWithAttachment(to, subject, htmlBody, null, null, null);
+    }
+
+    private void sendWithAttachment(String to, String subject, String htmlBody,
+                                     byte[] attachmentBytes, String attachmentFilename, String attachmentMimeType) {
         if (mailSender == null) {
             log.warn("EMAIL NOT SENT (no SMTP configured): to={} | subject={} | body={}", to, subject, htmlBody);
             return;
         }
         try {
             MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(msg, attachmentBytes != null, "UTF-8");
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
             if (fromAddress != null && !fromAddress.isBlank()) {
                 helper.setFrom(fromAddress);
+            }
+            if (attachmentBytes != null && attachmentFilename != null) {
+                helper.addAttachment(attachmentFilename, new ByteArrayResource(attachmentBytes),
+                        attachmentMimeType != null ? attachmentMimeType : "application/octet-stream");
             }
             mailSender.send(msg);
             log.info("Email sent to={} subject={}", to, subject);
