@@ -366,9 +366,66 @@ session state. Verified via unit tests instead. Also found (and left alone) a
 backend process already running on port 8080 from outside this session — didn't
 restart it to avoid disrupting whatever it's being used for.
 
-### Session 5 — Platform owner console
-- [ ] `GET/PUT /api/platform/feedback*` endpoints
-- [ ] `PlatformComponent` third tab + list/detail UI + attachment viewer
+### Session 5 — Platform owner console ✅ done
+
+- [x] `PlatformSubmissionDTO` (`dto/`) — admin-facing view of `UserSubmission`; adds
+      `submitterName`/`submitterEmail` (resolved from `UserSubmission.user`) that the
+      self-service `UserSubmissionDTO` intentionally omits (that one is returned to the
+      submitter about their own submission — no need to echo their own name/email back).
+- [x] `UserSubmissionService` additions — `listForPlatform(type, status)` (both filters
+      optional; type filters via a repo query, status filters in-memory since there's no
+      `findByStatus` repo method and the list is expected to stay small), `updateStatus(id,
+      status)`, `streamAttachment(id)` (returns a `Resource`, mirrors
+      `DocumentService.download()`). Authorization is NOT checked here — same convention
+      Session 3 established: `platformService.requirePlatformAdmin()` gates in the
+      controller, this service only does data access. Also deduped `create()`'s inline
+      type-parsing into the same `parseType()` helper these new methods use.
+- [x] `PlatformFeedbackController` additions (sibling to the Session 3 grant-reward
+      endpoint, same controller): `GET /api/platform/feedback?type=&status=`,
+      `PUT /api/platform/feedback/{id}/status`, `GET /api/platform/feedback/{id}/attachment`
+      (streams via `submissionService.streamAttachment()`; `Content-Disposition: inline`
+      rather than `attachment` — unlike `DocumentController`'s always-`attachment` pattern —
+      so images can render directly in an `<img>` tag for the thumbnail requirement; the
+      filename in the header is the server-generated UUID name, not sensitive, so no
+      sanitization needed unlike `DocumentController`'s user-supplied-filename case)
+- [x] `PlatformComponent` — `activeTab` widened to include `'feedback'`; new tab loads
+      lazily on first click (matches the existing `users` tab pattern); type/status filter
+      dropdowns re-fetch on change; row click expands to show full message, status buttons
+      (Mark Reviewed / Mark Resolved), and — only when `!rewardGranted` — a grant-reward
+      form (feature dropdown from the existing `userFeatures` list + months input) wired to
+      the Session 3 endpoint. Image attachments render as a 44px thumbnail via
+      `<img [src]="attachmentUrl(s)">`; non-image attachments get a "View" link that opens
+      the same URL in a new tab — both just point at the plain URL string (same pattern as
+      `DocumentService.downloadUrl()`: session cookies ride along automatically since
+      local dev is same-site even across the :4200/:8080 ports, and prod is same-origin
+      through nginx, so no explicit credentials wiring was needed).
+- 23 new backend tests (`UserSubmissionServiceTest` — 9, listForPlatform submitter
+  identity/type-filter/status-filter, updateStatus, invalid status, streamAttachment
+  found/no-attachment/missing-from-disk, unknown-id; `PlatformFeedbackControllerTest` — 14
+  total including the Session 3 ones, +9 new for list/updateStatus/attachment). Full
+  suite: 239 tests, same 5 pre-existing unrelated `FeatureEntitlementServiceTest`
+  failures. `ng build` clean.
+
+**Manually verified end-to-end in a real browser** (user asked for this explicitly after
+two prior sessions deferred it due to an unrelated process already on port 8080 — user
+approved stopping it and restarting fresh; Playwright + Chromium driven via a throwaway
+script, not a project skill since none existed for this repo): submitted a FEEDBACK item
+and a BUG_REPORT with a real image attachment through the FAB widget; flipped
+`dev@localhost.local` to `platformAdmin=true` via the H2 console (same manual workaround
+`CLAUDE.local.md` documents for other local-only gates); opened `/platform` → Feedback
+tab — list rendered submitter name/email/type/message/attachment thumbnail/status/reward
+columns correctly, including older rows from prior sessions' manual testing (confirms
+real DB persistence across sessions, not a fixture); expanded a row, clicked "Mark
+Reviewed" (status pill flipped to REVIEWED), then granted a bonus-month reward (feature
+dropdown defaulted to Expense Sharing, 1 month) — UI flipped to "Reward already granted
+for this submission," and `curl`/server log confirmed it was real: a `user_feature_grants`
+row was inserted with `expires_at = now + 1 month`, not just client-side state. Two
+pre-existing rows from earlier sessions (ids 2, 33) logged `File not found in storage`
+when the console tried to load their thumbnails — expected, not a bug: Session 2's notes
+say test attachments were manually cleaned up from disk after that session, but the DB
+rows were left in place; the endpoint degrades gracefully (broken image icon, not a
+crash). No new console errors — the only browser console warnings were pre-existing and
+unrelated (New Relic config 404 in local dev).
 
 ### Session 6 — Hardening / manual QA
 - [ ] Abuse-mitigation follow-ups from the open-decisions section (rate limits, caps,

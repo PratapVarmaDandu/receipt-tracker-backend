@@ -1,7 +1,9 @@
 package com.receipttracker.service;
 
 import com.receipttracker.config.StoragePathResolver;
+import com.receipttracker.dto.PlatformSubmissionDTO;
 import com.receipttracker.dto.UserSubmissionDTO;
+import com.receipttracker.model.SubmissionStatus;
 import com.receipttracker.model.SubmissionType;
 import com.receipttracker.model.User;
 import com.receipttracker.model.UserSubmission;
@@ -11,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -21,9 +25,11 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserSubmissionService {
@@ -91,12 +97,7 @@ public class UserSubmissionService {
         if (message == null || message.isBlank()) {
             throw new RuntimeException("Message is required");
         }
-        SubmissionType type;
-        try {
-            type = SubmissionType.valueOf(typeStr.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Invalid submission type: " + typeStr);
-        }
+        SubmissionType type = parseType(typeStr);
 
         UserSubmission submission = new UserSubmission();
         submission.setUser(user);
@@ -181,6 +182,66 @@ public class UserSubmissionService {
                 submission.getAttachmentMimeType());
     }
 
+    // ── Platform admin console ──────────────────────────────────────────────
+    // Admin-gating (platformService.requirePlatformAdmin()) happens in
+    // PlatformFeedbackController, same convention as its existing grant-reward action —
+    // this service only handles the data access, not authorization.
+
+    @Transactional(readOnly = true)
+    public List<PlatformSubmissionDTO> listForPlatform(String typeStr, String statusStr) {
+        SubmissionType type = typeStr != null && !typeStr.isBlank() ? parseType(typeStr) : null;
+        SubmissionStatus status = statusStr != null && !statusStr.isBlank() ? parseStatus(statusStr) : null;
+        List<UserSubmission> submissions = type != null
+                ? submissionRepo.findByTypeOrderByCreatedAtDesc(type)
+                : submissionRepo.findAllByOrderByCreatedAtDesc();
+        return submissions.stream()
+                .filter(s -> status == null || s.getStatus() == status)
+                .map(this::toPlatformDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public PlatformSubmissionDTO updateStatus(Long id, String statusStr) {
+        UserSubmission submission = requireSubmission(id);
+        submission.setStatus(parseStatus(statusStr));
+        return toPlatformDTO(submissionRepo.save(submission));
+    }
+
+    /** Streams the raw attachment bytes; any platform admin may view any submitter's attachment. */
+    @Transactional(readOnly = true)
+    public Resource streamAttachment(Long id) throws IOException {
+        UserSubmission submission = requireSubmission(id);
+        if (submission.getAttachmentPath() == null) {
+            throw new RuntimeException("This submission has no attachment");
+        }
+        Path file = submissionDir(submission.getUser().getId()).resolve(submission.getAttachmentPath());
+        if (!Files.exists(file)) {
+            throw new RuntimeException("File not found in storage");
+        }
+        return new FileSystemResource(file);
+    }
+
+    private UserSubmission requireSubmission(Long id) {
+        return submissionRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Submission not found: " + id));
+    }
+
+    private SubmissionType parseType(String typeStr) {
+        try {
+            return SubmissionType.valueOf(typeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid submission type: " + typeStr);
+        }
+    }
+
+    private SubmissionStatus parseStatus(String statusStr) {
+        try {
+            return SubmissionStatus.valueOf(statusStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid status: " + statusStr);
+        }
+    }
+
     // ── Mapping ─────────────────────────────────────────────────────────────
 
     private UserSubmissionDTO toDTO(UserSubmission s) {
@@ -192,6 +253,20 @@ public class UserSubmissionService {
         dto.setStatus(s.getStatus());
         dto.setRewardGranted(s.isRewardGranted());
         dto.setCreatedAt(s.getCreatedAt());
+        return dto;
+    }
+
+    private PlatformSubmissionDTO toPlatformDTO(UserSubmission s) {
+        PlatformSubmissionDTO dto = new PlatformSubmissionDTO();
+        dto.setId(s.getId());
+        dto.setType(s.getType());
+        dto.setMessage(s.getMessage());
+        dto.setAttachmentMimeType(s.getAttachmentMimeType());
+        dto.setStatus(s.getStatus());
+        dto.setRewardGranted(s.isRewardGranted());
+        dto.setCreatedAt(s.getCreatedAt());
+        dto.setSubmitterName(s.getUser().getName());
+        dto.setSubmitterEmail(s.getUser().getEmail());
         return dto;
     }
 }

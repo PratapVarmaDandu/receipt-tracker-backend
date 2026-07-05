@@ -1,5 +1,6 @@
 package com.receipttracker.controller;
 
+import com.receipttracker.dto.PlatformSubmissionDTO;
 import com.receipttracker.model.AppFeature;
 import com.receipttracker.model.SubmissionType;
 import com.receipttracker.model.User;
@@ -7,6 +8,7 @@ import com.receipttracker.model.UserSubmission;
 import com.receipttracker.repository.UserSubmissionRepository;
 import com.receipttracker.service.PlatformService;
 import com.receipttracker.service.UserFeatureService;
+import com.receipttracker.service.UserSubmissionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,10 +18,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,6 +40,7 @@ import static org.mockito.Mockito.when;
 class PlatformFeedbackControllerTest {
 
     @Mock private UserSubmissionRepository submissionRepo;
+    @Mock private UserSubmissionService submissionService;
     @Mock private UserFeatureService userFeatureService;
     @Mock private PlatformService platformService;
 
@@ -119,5 +125,91 @@ class PlatformFeedbackControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         verify(userFeatureService, never()).grantBonusMonths(any(), any(), anyInt(), any());
+    }
+
+    // ── list ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void listDelegatesToServiceWithFilters() {
+        PlatformSubmissionDTO dto = new PlatformSubmissionDTO();
+        when(submissionService.listForPlatform("BUG_REPORT", "NEW")).thenReturn(List.of(dto));
+
+        ResponseEntity<?> response = controller.list("BUG_REPORT", "NEW");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(List.of(dto));
+    }
+
+    @Test
+    void listRejectsNonAdmin() {
+        doThrow(new RuntimeException("Platform admin access required"))
+                .when(platformService).requirePlatformAdmin();
+
+        ResponseEntity<?> response = controller.list(null, null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(submissionService, never()).listForPlatform(any(), any());
+    }
+
+    // ── updateStatus ─────────────────────────────────────────────────────────
+
+    @Test
+    void updateStatusDelegatesToService() {
+        PlatformSubmissionDTO dto = new PlatformSubmissionDTO();
+        when(submissionService.updateStatus(1L, "RESOLVED")).thenReturn(dto);
+
+        ResponseEntity<?> response = controller.updateStatus(1L, Map.of("status", "RESOLVED"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(dto);
+    }
+
+    @Test
+    void updateStatusRejectsNonAdmin() {
+        doThrow(new RuntimeException("Platform admin access required"))
+                .when(platformService).requirePlatformAdmin();
+
+        ResponseEntity<?> response = controller.updateStatus(1L, Map.of("status", "RESOLVED"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(submissionService, never()).updateStatus(any(), any());
+    }
+
+    // ── attachment ───────────────────────────────────────────────────────────
+
+    @Test
+    void attachmentStreamsResource() throws Exception {
+        submission.setAttachmentPath("uuid-123.png");
+        submission.setAttachmentMimeType("image/png");
+        Resource resource = new FileSystemResource("pom.xml");
+        when(submissionService.streamAttachment(1L)).thenReturn(resource);
+
+        ResponseEntity<?> response = controller.attachment(1L);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getContentDisposition().toString()).contains("uuid-123.png");
+        assertThat(response.getBody()).isEqualTo(resource);
+    }
+
+    @Test
+    void attachmentRejectsNonAdmin() throws Exception {
+        doThrow(new RuntimeException("Platform admin access required"))
+                .when(platformService).requirePlatformAdmin();
+
+        ResponseEntity<?> response = controller.attachment(1L);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(submissionService, never()).streamAttachment(any());
+    }
+
+    @Test
+    void attachmentPropagatesMissingAttachmentError() throws Exception {
+        when(submissionService.streamAttachment(1L))
+                .thenThrow(new RuntimeException("This submission has no attachment"));
+
+        ResponseEntity<?> response = controller.attachment(1L);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(((Map<?, ?>) response.getBody()).get("error")).isEqualTo("This submission has no attachment");
     }
 }

@@ -1,17 +1,23 @@
 package com.receipttracker.controller;
 
+import com.receipttracker.dto.PlatformSubmissionDTO;
 import com.receipttracker.model.AppFeature;
 import com.receipttracker.model.UserSubmission;
 import com.receipttracker.repository.UserSubmissionRepository;
 import com.receipttracker.service.PlatformService;
 import com.receipttracker.service.UserFeatureService;
+import com.receipttracker.service.UserSubmissionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -21,8 +27,55 @@ public class PlatformFeedbackController {
     private static final Logger log = LoggerFactory.getLogger(PlatformFeedbackController.class);
 
     @Autowired private UserSubmissionRepository submissionRepo;
+    @Autowired private UserSubmissionService submissionService;
     @Autowired private UserFeatureService userFeatureService;
     @Autowired private PlatformService platformService;
+
+    @GetMapping
+    public ResponseEntity<?> list(@RequestParam(required = false) String type,
+                                   @RequestParam(required = false) String status) {
+        try {
+            platformService.requirePlatformAdmin();
+            List<PlatformSubmissionDTO> submissions = submissionService.listForPlatform(type, status);
+            return ResponseEntity.ok(submissions);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/status")
+    public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        try {
+            platformService.requirePlatformAdmin();
+            PlatformSubmissionDTO result = submissionService.updateStatus(id, body.get("status"));
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/attachment")
+    public ResponseEntity<?> attachment(@PathVariable Long id) {
+        try {
+            platformService.requirePlatformAdmin();
+            UserSubmission submission = submissionRepo.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Submission not found: " + id));
+            Resource resource = submissionService.streamAttachment(id);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + submission.getAttachmentPath() + "\"")
+                    .contentType(mediaType(submission.getAttachmentMimeType()))
+                    .body(resource);
+        } catch (Exception e) {
+            log.error("!!! attachment stream failed submissionId={}: {}", id, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private MediaType mediaType(String contentType) {
+        if (contentType == null) return MediaType.APPLICATION_OCTET_STREAM;
+        try { return MediaType.parseMediaType(contentType); }
+        catch (Exception e) { return MediaType.APPLICATION_OCTET_STREAM; }
+    }
 
     /** Admin reviews a feedback/bug/idea submission and manually grants a bonus month. */
     @PutMapping("/{id}/grant-reward")
