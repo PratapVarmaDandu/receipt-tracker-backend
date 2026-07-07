@@ -23,6 +23,9 @@ public class JobApplicationDTO {
     private String hrPhone;
     private String recruiterName;
     private String recruiterEmail;
+    private String portalUsername;
+    private String portalPassword;
+    private Boolean emailConfirmationReceived;
     private String jobDescription;
     private String prepNotes;
     private String notes;

@@ -50,6 +50,12 @@ public class JobApplication {
     private String recruiterName;
     private String recruiterEmail;
 
+    /** Login credentials for the account created on the employer's application portal (e.g. Workday). */
+    private String portalUsername;
+    private String portalPassword;
+
+    private Boolean emailConfirmationReceived = false;
+
     @Column(columnDefinition = "TEXT")
     private String jobDescription;
 

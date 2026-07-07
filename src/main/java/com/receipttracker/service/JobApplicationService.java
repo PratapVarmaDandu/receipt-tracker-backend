@@ -226,6 +226,10 @@ public class JobApplicationService {
         app.setHrPhone(req.getHrPhone());
         app.setRecruiterName(req.getRecruiterName());
         app.setRecruiterEmail(req.getRecruiterEmail());
+        app.setPortalUsername(req.getPortalUsername());
+        app.setPortalPassword(req.getPortalPassword());
+        if (req.getEmailConfirmationReceived() != null)
+            app.setEmailConfirmationReceived(req.getEmailConfirmationReceived());
         app.setJobDescription(req.getJobDescription());
         app.setPrepNotes(req.getPrepNotes());
         app.setNotes(req.getNotes());
@@ -264,6 +268,9 @@ public class JobApplicationService {
         dto.setHrPhone(app.getHrPhone());
         dto.setRecruiterName(app.getRecruiterName());
         dto.setRecruiterEmail(app.getRecruiterEmail());
+        dto.setPortalUsername(app.getPortalUsername());
+        dto.setPortalPassword(app.getPortalPassword());
+        dto.setEmailConfirmationReceived(app.getEmailConfirmationReceived());
         dto.setJobDescription(app.getJobDescription());
         dto.setPrepNotes(app.getPrepNotes());
         dto.setNotes(app.getNotes());
