@@ -13,6 +13,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -31,6 +32,9 @@ public class SecurityConfig {
 
     @Autowired
     private OAuth2SuccessHandler successHandler;
+
+    @Autowired
+    private ClientRegistrationRepository clientRegistrationRepository;
 
     @Autowired
     private Environment environment;
@@ -100,6 +104,9 @@ public class SecurityConfig {
 
         http
             .oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(endpoint -> endpoint
+                    .authorizationRequestResolver(
+                        new MobileAwareOAuth2AuthorizationRequestResolver(clientRegistrationRepository)))
                 .userInfoEndpoint(ui -> ui.userService(oAuth2UserService))
                 .successHandler(successHandler)
                 .failureUrl(frontendUrl + "/login?error=true")
@@ -155,8 +162,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Allow both local dev and the production frontend URL
-        config.setAllowedOrigins(List.of("http://localhost:4200", frontendUrl));
+        // Allow local dev, the production frontend URL, and the Capacitor native app origins
+        // (capacitor://localhost on iOS, https://localhost on Android — fixed by the Capacitor
+        // WebView, not deployment-specific like frontendUrl)
+        config.setAllowedOrigins(List.of("http://localhost:4200", frontendUrl, "capacitor://localhost", "https://localhost"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowCredentials(true);

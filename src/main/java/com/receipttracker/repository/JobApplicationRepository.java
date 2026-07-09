@@ -20,6 +20,12 @@ public interface JobApplicationRepository extends JpaRepository<JobApplication, 
            "AND ja.status NOT IN ('REJECTED', 'WITHDRAWN', 'GHOSTED', 'OFFER')")
     List<JobApplication> findFollowUpsDue(User user, LocalDate today);
 
+    // Same as findFollowUpsDue but across all users — used by the daily push-reminder scheduler.
+    @Query("SELECT ja FROM JobApplication ja WHERE " +
+           "ja.followUpDate IS NOT NULL AND ja.followUpDate <= :today " +
+           "AND ja.status NOT IN ('REJECTED', 'WITHDRAWN', 'GHOSTED', 'OFFER')")
+    List<JobApplication> findAllFollowUpsDue(LocalDate today);
+
     long countByUser(User user);
 
     long countByUserAndAppliedDateBetween(User user, LocalDate from, LocalDate to);

@@ -117,6 +117,13 @@
             <version>8.12.0</version>
             <scope>compile</scope>
         </dependency>
+        <!-- Firebase Cloud Messaging — single integration covers push to both Android (native FCM)
+             and iOS (FCM bridges to APNs via the Firebase console's APNs Auth Key config) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.3.0</version>
+        </dependency>
     </dependencies>
 
     <profiles>

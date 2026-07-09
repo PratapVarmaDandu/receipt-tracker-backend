@@ -16,6 +16,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @Value("${app.frontend.url:http://localhost:4200}")
     private String frontendUrl;
 
+    @Value("${app.mobile.redirect-url:receipttracker://auth-callback}")
+    private String mobileRedirectUrl;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
@@ -25,6 +28,13 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 request.getSession().setAttribute(NewSignupFlag.SESSION_KEY, true);
             }
         }
+
+        if (Boolean.TRUE.equals(request.getSession().getAttribute(MobileOAuthFlag.SESSION_KEY))) {
+            request.getSession().removeAttribute(MobileOAuthFlag.SESSION_KEY);
+            getRedirectStrategy().sendRedirect(request, response, mobileRedirectUrl);
+            return;
+        }
+
         getRedirectStrategy().sendRedirect(request, response, frontendUrl + "/dashboard");
     }
 }
