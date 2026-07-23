@@ -31,7 +31,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         if (Boolean.TRUE.equals(request.getSession().getAttribute(MobileOAuthFlag.SESSION_KEY))) {
             request.getSession().removeAttribute(MobileOAuthFlag.SESSION_KEY);
-            getRedirectStrategy().sendRedirect(request, response, mobileRedirectUrl);
+            String sessionId = request.getSession().getId();
+            String redirectUrl = mobileRedirectUrl + "?sessionId=" + sessionId;
+            getRedirectStrategy().sendRedirect(request, response, redirectUrl);
             return;
         }
 
