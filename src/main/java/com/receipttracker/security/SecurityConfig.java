@@ -2,6 +2,9 @@ package com.receipttracker.security;
 
 import com.receipttracker.config.LocalDevSecurityFilter;
 import com.receipttracker.config.RateLimitFilter;
+import com.receipttracker.repository.UserRepository;
+import com.receipttracker.service.RefreshTokenService;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +38,12 @@ public class SecurityConfig {
 
     @Autowired
     private ClientRegistrationRepository clientRegistrationRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private RefreshTokenService refreshTokenService;
 
     @Autowired
     private Environment environment;
@@ -114,6 +123,14 @@ public class SecurityConfig {
             .logout(logout -> logout
                 .logoutUrl("/api/auth/logout")
                 .logoutSuccessHandler((req, res, auth) -> {
+                    if (auth != null && auth.getPrincipal() instanceof OAuth2User principal) {
+                        String googleId = principal.getAttribute("sub");
+                        if (googleId != null) {
+                            userRepository.findByGoogleId(googleId).ifPresent(user -> {
+                                refreshTokenService.revokeAllForUser(user);
+                            });
+                        }
+                    }
                     res.setStatus(HttpServletResponse.SC_OK);
                     res.setContentType("application/json");
                     res.getWriter().write("{\"message\":\"Logged out\"}");

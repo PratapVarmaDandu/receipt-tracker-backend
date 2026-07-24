@@ -3,6 +3,7 @@ package com.receipttracker.controller;
 import com.receipttracker.model.User;
 import com.receipttracker.repository.UserRepository;
 import com.receipttracker.security.NewSignupFlag;
+import com.receipttracker.service.RefreshTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -11,9 +12,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.Map;
 
 @RestController
@@ -24,6 +30,9 @@ public class AuthController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private RefreshTokenService refreshTokenService;
 
     @GetMapping("/me")
     public ResponseEntity<?> me(Authentication authentication, HttpServletRequest request) {
@@ -42,9 +51,6 @@ public class AuthController {
             String googleId = oAuth2User.getAttribute("sub");
             log.debug("GET /api/auth/me - Checking user: googleId={}", googleId);
 
-            // Read-only: this flag is consumed (cleared) by POST /api/referrals/claim,
-            // not here, so repeated /me calls (page refreshes) keep reporting it until
-            // the frontend actually attempts a claim.
             HttpSession session = request.getSession(false);
             boolean isNewSignup = session != null && Boolean.TRUE.equals(session.getAttribute(NewSignupFlag.SESSION_KEY));
 
@@ -92,5 +98,49 @@ public class AuthController {
             log.info("Welcome banner dismissed for userId={}", user.getId());
         });
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        String rawRefreshToken = body.get("refreshToken");
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "refreshToken is required"));
+        }
+
+        try {
+            // Validate and rotate the refresh token
+            RefreshTokenService.RotationResult result = refreshTokenService.validateAndRotate(rawRefreshToken);
+            User user = result.getUser();
+            String nextRawToken = result.getRotatedRawToken();
+
+            // Programmatically authenticate user into Spring Security context
+            Map<String, Object> attrs = Map.of(
+                    "sub",   user.getGoogleId(),
+                    "email", user.getEmail(),
+                    "name",  user.getName() != null ? user.getName() : ""
+            );
+            OAuth2User principal = new DefaultOAuth2User(
+                    Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")),
+                    attrs, "sub");
+            OAuth2AuthenticationToken auth = new OAuth2AuthenticationToken(
+                    principal, principal.getAuthorities(), "google");
+
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            
+            // Re-bind session
+            HttpSession session = request.getSession(true);
+            session.setAttribute("SPRING_SECURITY_CONTEXT", SecurityContextHolder.getContext());
+            String sessionId = session.getId();
+
+            log.info("Programmatically authenticated user id={} via refresh token", user.getId());
+
+            return ResponseEntity.ok(Map.of(
+                    "sessionId",    sessionId,
+                    "refreshToken", nextRawToken
+            ));
+        } catch (Exception e) {
+            log.warn("Refresh token authentication failed: {}", e.getMessage());
+            return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+        }
     }
 }
