@@ -100,6 +100,15 @@ public class ExpenseShareService {
             }
         }
 
+        if ("CUSTOM".equalsIgnoreCase(splitType)) {
+            BigDecimal totalCustomAssigned = invitees.stream()
+                    .map(ShareInviteItem::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (totalCustomAssigned.compareTo(receipt.getTotal()) > 0) {
+                throw new RuntimeException("Combined assigned amounts ($" + totalCustomAssigned + ") cannot exceed receipt total ($" + receipt.getTotal() + ")");
+            }
+        }
+
         boolean isEqual = "EQUAL".equalsIgnoreCase(splitType);
         BigDecimal equalAmount = isEqual
                 ? receipt.getTotal().divide(BigDecimal.valueOf(invitees.size() + 1), 2, RoundingMode.HALF_UP)
