@@ -18,8 +18,11 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "google_id", unique = true, nullable = false)
+    @Column(name = "google_id", unique = true)
     private String googleId;
+
+    @Column(name = "apple_id", unique = true)
+    private String appleId;
 
     @Column(unique = true, nullable = false)
     private String email;
