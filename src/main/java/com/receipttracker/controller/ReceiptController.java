@@ -1,5 +1,6 @@
 package com.receipttracker.controller;
 
+import com.receipttracker.config.ApiErrors;
 import com.receipttracker.dto.AddReceiptToGroupRequest;
 import com.receipttracker.dto.ReceiptDTO;
 import com.receipttracker.service.ReceiptService;
@@ -24,12 +25,11 @@ public class ReceiptController {
 
     @GetMapping
     public ResponseEntity<List<ReceiptDTO>> getAll() {
-        log.trace(">>> GET /api/receipts - Fetching all receipts");
+        log.info("GET /api/receipts - Fetching all user receipts");
         long startTime = System.currentTimeMillis();
         try {
             List<ReceiptDTO> receipts = receiptService.getAll();
-            long duration = System.currentTimeMillis() - startTime;
-            log.debug("<<< GET /api/receipts completed - count={}, duration={}ms", receipts.size(), duration);
+            log.info("<<< GET /api/receipts - SUCCESS: count={}, duration={}ms", receipts.size(), System.currentTimeMillis() - startTime);
             return ResponseEntity.ok(receipts);
         } catch (Exception e) {
             log.error("!!! GET /api/receipts failed after {}ms: {}", System.currentTimeMillis() - startTime, e.getMessage(), e);
@@ -38,14 +38,12 @@ public class ReceiptController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ReceiptDTO> getById(@PathVariable Long id) {
-        log.trace(">>> GET /api/receipts/{} - Fetching receipt by id", id);
+    public ResponseEntity<?> getById(@PathVariable Long id) {
+        log.info("GET /api/receipts/{} - Fetching single receipt", id);
         long startTime = System.currentTimeMillis();
         try {
             ReceiptDTO receipt = receiptService.getById(id);
-            long duration = System.currentTimeMillis() - startTime;
-            log.debug("<<< GET /api/receipts/{} completed - store={}, total={}, duration={}ms", 
-                id, receipt.getStoreName(), receipt.getTotal(), duration);
+            log.info("<<< GET /api/receipts/{} - SUCCESS: duration={}ms", id, System.currentTimeMillis() - startTime);
             return ResponseEntity.ok(receipt);
         } catch (Exception e) {
             log.error("!!! GET /api/receipts/{} failed after {}ms: {}", id, System.currentTimeMillis() - startTime, e.getMessage(), e);
@@ -72,8 +70,9 @@ public class ReceiptController {
             long duration = System.currentTimeMillis() - startTime;
             log.error("!!! POST /api/receipts/upload FAILED - file='{}', duration={}ms, error={}", 
                     file.getOriginalFilename(), duration, e.getMessage(), e);
+            String safeMsg = ApiErrors.safeMessage(e);
             return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Upload failed: " + e.getMessage(),
+                    "error", safeMsg,
                     "type",  e.getClass().getSimpleName()
             ));
         }

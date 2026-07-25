@@ -94,19 +94,19 @@ public class ReceiptService {
 
             Receipt receipt = new Receipt();
             receipt.setUser(user);
-            receipt.setStoreName(parsed.getStoreName());
-            receipt.setStoreType(parsed.getStoreType());
+            receipt.setStoreName(truncate(parsed.getStoreName(), 255));
+            receipt.setStoreType(parsed.getStoreType() != null ? parsed.getStoreType() : com.receipttracker.model.StoreType.OTHER);
             receipt.setPurchaseDateTime(
                     parsed.getPurchaseDateTime() != null ? parsed.getPurchaseDateTime() : LocalDateTime.now());
-            receipt.setCardType(parsed.getCardType());
-            receipt.setCardBank(parsed.getCardBank());
-            receipt.setLastFourDigits(parsed.getLastFourDigits());
-            receipt.setPaymentCard(parsed.getPaymentCard());
+            receipt.setCardType(truncate(parsed.getCardType(), 50));
+            receipt.setCardBank(truncate(parsed.getCardBank(), 50));
+            receipt.setLastFourDigits(truncate(parsed.getLastFourDigits(), 20));
+            receipt.setPaymentCard(truncate(parsed.getPaymentCard(), 100));
             receipt.setSubtotal(parsed.getSubtotal());
             receipt.setTax(parsed.getTax());
             receipt.setTip(parsed.getTip());
             receipt.setTotal(parsed.getTotal());
-            receipt.setReceiptType(parsed.getReceiptType());
+            receipt.setReceiptType(parsed.getReceiptType() != null ? parsed.getReceiptType() : com.receipttracker.model.ReceiptType.PURCHASE);
             receipt.setRawOcrText(ocr.extractedText());
             receipt.setImageFileName(ocr.savedFilename());
 
@@ -466,5 +466,10 @@ public class ReceiptService {
             }
         }
         return r;
+    }
+
+    private String truncate(String str, int maxLen) {
+        if (str == null) return null;
+        return str.length() <= maxLen ? str : str.substring(0, maxLen);
     }
 }

@@ -21,19 +21,29 @@ public class Receipt {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "store_name", length = 255)
     private String storeName;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "store_type", length = 50)
     private StoreType storeType;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "receipt_type", length = 50)
     private ReceiptType receiptType = ReceiptType.PURCHASE;
 
     private LocalDateTime purchaseDateTime;
 
+    @Column(name = "card_type", length = 50)
     private String cardType;        // VISA, MASTERCARD, AMEX, DISCOVER
+
+    @Column(name = "card_bank", length = 50)
     private String cardBank;        // CHASE, DISCOVER, AMEX, CAPITAL_ONE, CITI, etc.
+
+    @Column(name = "last_four_digits", length = 20)
     private String lastFourDigits;
+
+    @Column(name = "payment_card", length = 100)
     private String paymentCard;     // e.g. CHASE_VISA_1234
 
     private BigDecimal subtotal;
