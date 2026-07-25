@@ -166,6 +166,16 @@ public class GroupService {
                     .findFirst()
                     .ifPresent(m -> dto.setCurrentUserRole(m.getRole()));
         }
+        dto.setMembers(members.stream().map(m -> {
+            GroupMemberDTO mdto = new GroupMemberDTO();
+            mdto.setId(m.getId());
+            mdto.setName(m.getUser().getName());
+            mdto.setEmail(m.getUser().getEmail());
+            mdto.setPicture(m.getUser().getPicture());
+            mdto.setRole(m.getRole());
+            mdto.setJoinedAt(m.getJoinedAt());
+            return mdto;
+        }).collect(Collectors.toList()));
         return dto;
     }
 
