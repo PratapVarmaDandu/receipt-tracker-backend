@@ -37,6 +37,9 @@ public class ReceiptDTO {
     private Long vehicleId;
     private String vehicleName;
     private String vehicleCategory;
+    private Long userId;
+    private String uploaderName;
+    private String uploaderEmail;
 
     public Long getGroupId() { return groupId; }
     public void setGroupId(Long groupId) { this.groupId = groupId; }
@@ -48,4 +51,10 @@ public class ReceiptDTO {
     public void setVehicleName(String vehicleName) { this.vehicleName = vehicleName; }
     public String getVehicleCategory() { return vehicleCategory; }
     public void setVehicleCategory(String vehicleCategory) { this.vehicleCategory = vehicleCategory; }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public String getUploaderName() { return uploaderName; }
+    public void setUploaderName(String uploaderName) { this.uploaderName = uploaderName; }
+    public String getUploaderEmail() { return uploaderEmail; }
+    public void setUploaderEmail(String uploaderEmail) { this.uploaderEmail = uploaderEmail; }
 }

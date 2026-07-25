@@ -400,6 +400,12 @@ public class ReceiptService {
         dto.setImageFileName(r.getImageFileName());
         dto.setUploadedAt(r.getUploadedAt());
 
+        if (r.getUser() != null) {
+            dto.setUserId(r.getUser().getId());
+            dto.setUploaderName(r.getUser().getName());
+            dto.setUploaderEmail(r.getUser().getEmail());
+        }
+
         if (r.getGroup() != null) {
             dto.setGroupId(r.getGroup().getId());
             dto.setGroupName(r.getGroup().getName());
